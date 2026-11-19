@@ -4,4 +4,4 @@ INSERT INTO api_keys (apikey, creationdate, description, enabled, fullaccess, ni
 SET @id = LAST_INSERT_ID();
 INSERT INTO api_access (idapikey, resource, allowget, allowpost, allowput, allowdelete) VALUES
  (@id,'clientes',1,1,1,0),(@id,'facturaclientes',1,0,0,0),(@id,'telecoFacturaCliente',0,1,0,0),
- (@id,'crearFacturaRectificativaCliente',0,1,0,0),(@id,'pagarFacturaCliente',0,1,0,0),(@id,'exportarFacturaCliente',1,0,0,0);
+ (@id,'crearFacturaRectificativaCliente',0,1,0,0),(@id,'pagarFacturaCliente',0,1,0,0),(@id,'exportarFacturaCliente',1,0,0,0),(@id,'productos',1,1,1,0);
