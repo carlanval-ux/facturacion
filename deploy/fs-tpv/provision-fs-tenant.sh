@@ -57,8 +57,9 @@ php_admin_value[upload_tmp_dir] = $BASE/tmp
 php_admin_value[sys_temp_dir] = $BASE/tmp
 php_admin_value[session.save_path] = $BASE/tmp
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,popen
+; PHP 8.5: FS emite avisos de imagedestroy() que corrompen los PDF si se muestran
 php_admin_flag[display_errors] = off
-php_admin_value[error_reporting] = E_ALL & ~E_DEPRECATED   ; PHP 8.5: FS emite avisos de imagedestroy() que corrompen los PDF
+php_admin_value[error_reporting] = E_ALL & ~E_DEPRECATED
 php_admin_flag[log_errors] = on
 EOF
 [[ -f "$POOL" ]] && CREATED+=("pool:$POOL")
