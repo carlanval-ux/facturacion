@@ -57,6 +57,9 @@ php_admin_value[upload_tmp_dir] = $BASE/tmp
 php_admin_value[sys_temp_dir] = $BASE/tmp
 php_admin_value[session.save_path] = $BASE/tmp
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,popen
+php_admin_flag[display_errors] = off
+php_admin_value[error_reporting] = E_ALL & ~E_DEPRECATED   ; PHP 8.5: FS emite avisos de imagedestroy() que corrompen los PDF
+php_admin_flag[log_errors] = on
 EOF
 [[ -f "$POOL" ]] && CREATED+=("pool:$POOL")
 
@@ -85,5 +88,8 @@ EOF
 ln -sf "$VHOST" "/etc/nginx/sites-enabled/fs-$SLUG.conf"; CREATED+=("vhost:$VHOST")
 php-fpm"$PHP" -t && nginx -t && systemctl reload "php$PHP-fpm" nginx
 
-# 6) bootstrap de FS (plugin TelecoBridge, token de API con acceso minimo, modo prueba): igual que deploy/fs-poc/bootstrap.sh
+# 6) FS cachea los ajustes en MyFiles/Tmp/FileCache: tras tocar la BD (api_keys, enable_api) hay que vaciarla
+rm -rf "$BASE"/current/MyFiles/Tmp/FileCache/* 2>/dev/null || true
+
+# 7) bootstrap de FS (plugin TelecoBridge, token de API con acceso minimo, modo prueba): igual que deploy/fs-poc/bootstrap.sh
 echo "[fs-$SLUG] listo en $DOMAIN (TLS con certbot y bootstrap de FS: pasos manuales documentados en README.md)"
