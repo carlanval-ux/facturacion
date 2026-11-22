@@ -95,7 +95,6 @@
                     </div>
                 {% endif %}
                 <div class="{{ hasAlerts ? 'col-lg-6' : 'col-12' }}">
-                    {{ _self.sectionHelp() }}
                 </div>
             </div>
             {% if fsc.openLinks %}
@@ -103,7 +102,6 @@
                     {{ _self.sectionRecent(fsc) }}
                 </div>
             {% endif %}
-            {{ _self.sectionNews(fsc) }}
         {% endblock %}
         {% for includeView in getIncludeViews('Dashboard', 'sectionsAfter') %}
             {% include includeView['path'] %}
