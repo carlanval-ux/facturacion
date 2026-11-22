@@ -121,11 +121,11 @@
                                 ['ListFacturaCliente', 'ListFacturaCliente?activetab=ListReciboCliente', 'Cobros'],
                                 ['ListEmpresa', 'ListEmpresa', 'Ajustes de la empresa']
                             ] %}
-                            {% for item in flSimple if fsc.user.can(item[0]) %}
+                            {% for item in flSimple %}{% if fsc.user.can(item[0]) %}
                                 <li class="nav-item">
                                     <a class="nav-link{{ item[1] == fsc.url() ? ' active' : '' }}" href="{{ item[1] }}">{{ item[2] }}</a>
                                 </li>
-                            {% endfor %}
+                            {% endif %}{% endfor %}
                         {% endif %}
                     </ul>
                     <ul class="navbar-nav ms-lg-auto align-items-lg-center">
