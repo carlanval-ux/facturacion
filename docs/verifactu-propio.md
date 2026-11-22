@@ -4,6 +4,10 @@ Estado: v0.1, 2026-11-23. Código: `integration/verifactu-service/` (servicio No
 **Clean-room**: no se ha consultado el plugin oficial `Verifactu` de facturascripts.com (EULA). Fuentes: especificaciones de la AEAT (XSD/WSDL, huella, QR) y el módulo propio de Teleco
 (`_wt-fs-cliente/src/verifactu/`: cifrado, huella/XML, transporte, entorno), del que se reutiliza la lógica ya probada.
 
+> **Ajuste de alcance (2026-11-23, OWNER):** plataforma única multitenant sobre Teleco-viabilidad; los clientes no ven el panel de FS. El servicio y su API por tenant
+> (token por tenant, custodia de certificados) quedan como pieza central; la subida del certificado y el estado vivirán en el front de Teleco, que llama a esta API **desde su backend**
+> (el token del tenant no debe llegar al navegador). El plugin `FacturaloVerifactu` pasa a pieza mínima opcional para sellar/enviar desde el motor de FS. Rotación de token: `POST /admin/instalaciones/rotar-token`.
+
 ## 1. Arquitectura
 
 ```

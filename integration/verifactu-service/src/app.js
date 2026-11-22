@@ -114,6 +114,14 @@ export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora
       return [200, { ok: true }];
     },
 
+    // Rotación del token de un tenant (el anterior deja de valer al instante). Lo invoca el backend de la plataforma, nunca el navegador del cliente.
+    'POST /admin/instalaciones/rotar-token': async (req, body) => {
+      esAdmin(req);
+      const token = randomBytes(32).toString('base64url');
+      exige(run('UPDATE instalaciones SET token_hash=? WHERE id=? AND activa=1', sha(token), txt(body.id, 60, 'id')).changes, 404, 'No existe');
+      return [200, { token }];
+    },
+
     'GET /v1/estado': async (req) => {
       const inst = autenticar(req), entorno = entornoActivo(env);
       const c = q("SELECT * FROM certificados WHERE instalacion_id=? AND entorno=? AND estado='activo'", inst.id, entorno);

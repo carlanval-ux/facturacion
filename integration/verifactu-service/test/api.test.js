@@ -128,3 +128,13 @@ test('validación de entrada', async (t) => {
     assert.equal((await s.api('POST', '/v1/registros/alta', { token: A.token, body: { factura: f } })).status, 422);
   assert.equal((await s.api('POST', '/admin/instalaciones', { token: s.env.ADMIN_TOKEN, body: { nombre: 'x', nif: 'corto', nombre_empresa: 'x' } })).status, 422);
 });
+
+test('rotación de token: el anterior deja de valer y los datos se conservan', async (t) => {
+  const s = await levantar(); t.after(s.cerrar);
+  const A = await s.instalacion(NIF_A); await subirCert(s.api, A.token, p12A);
+  const r = await s.api('POST', '/admin/instalaciones/rotar-token', { token: s.env.ADMIN_TOKEN, body: { id: A.id } });
+  assert.equal(r.status, 200);
+  assert.equal((await s.api('GET', '/v1/estado', { token: A.token })).status, 401);
+  assert.equal((await s.api('GET', '/v1/estado', { token: r.json.token })).json.certificado.titular_nif, NIF_A);
+  assert.equal((await s.api('POST', '/admin/instalaciones/rotar-token', { token: A.token, body: { id: A.id } })).status, 401);
+});
