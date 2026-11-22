@@ -23,6 +23,12 @@ if [[ -n "$PREV" ]]; then
   for f in config.php MyFiles; do [[ -e "$SH/$f" || -L "$PREV/$f" || ! -e "$PREV/$f" ]] || as mv "$PREV/$f" "$SH/$f"; done
   for f in config.php MyFiles; do [[ -e "$SH/$f" && ! -L "$PREV/$f" ]] && as ln -s "$SH/$f" "$PREV/$f" || true; done
 fi
+# plugins subidos desde el panel (p. ej. de terceros con licencia propia, que no van en el artefacto) viven en shared/Plugins y se enlazan en cada release
+as mkdir -p "$SH/Plugins" "$R/Plugins"
+if [[ -n "$PREV" && -d "$PREV/Plugins" ]]; then
+  for d in "$PREV"/Plugins/*/; do n="$(basename "$d")"; [[ -e "$R/Plugins/$n" || -L "${d%/}" ]] && continue; as mv "${d%/}" "$SH/Plugins/$n" && as ln -s "$SH/Plugins/$n" "$PREV/Plugins/$n"; done
+fi
+for d in "$SH"/Plugins/*/; do [[ -d "$d" ]] || continue; n="$(basename "$d")"; [[ -e "$R/Plugins/$n" ]] || as ln -s "$SH/Plugins/$n" "$R/Plugins/$n"; done
 [[ -d "$SH/MyFiles" ]] || as mkdir -p "$SH/MyFiles"
 as ln -s "$SH/MyFiles" "$R/MyFiles"; [[ -e "$SH/config.php" ]] && as ln -s "$SH/config.php" "$R/config.php"
 
