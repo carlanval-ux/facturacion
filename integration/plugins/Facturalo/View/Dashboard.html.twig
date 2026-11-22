@@ -49,6 +49,9 @@
             {% block sectionStats %}
                 {{ _self.sectionStats(fsc) }}
             {% endblock %}
+            {% if fsc.stats['sales'] is defined %}
+                {{ _self.sectionCharts() }}
+            {% endif %}
             {% for includeView in getIncludeViews('Dashboard', 'sectionStatsAfter') %}
                 {% include includeView['path'] %}
             {% endfor %}
@@ -316,6 +319,37 @@
             </table>
         </div>
     </div>
+{% endmacro %}
+
+{% macro sectionCharts() %}
+    <section class="row g-3 mb-4" id="flCharts" aria-label="Gráficas de ventas">
+        <div class="col-lg-8">
+            <div class="card h-100 fl-chart"><div class="card-body">
+                <h2 class="h6">Ventas de los últimos 12 meses <small class="text-muted fw-normal">(sin IVA)</small></h2>
+                <div class="fl-canvas"><canvas id="flChartMonthly" role="img" aria-label="Gráfica de barras: ventas mensuales de los últimos 12 meses. Los datos están en la tabla siguiente."></canvas>
+                    <table class="visually-hidden" id="flTableMonthly"></table></div>
+                <p class="fl-empty text-muted mb-0" hidden></p>
+            </div></div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100 fl-chart"><div class="card-body">
+                <h2 class="h6">Facturas por estado <small class="text-muted fw-normal">(ejercicio actual)</small></h2>
+                <div class="fl-canvas"><canvas id="flChartStatus" role="img" aria-label="Gráfico de anillo: facturas cobradas, pendientes y vencidas. Los datos están en la tabla siguiente."></canvas>
+                    <table class="visually-hidden" id="flTableStatus"></table></div>
+                <p class="fl-empty text-muted mb-0" hidden></p>
+            </div></div>
+        </div>
+        <div class="col-12">
+            <div class="card fl-chart"><div class="card-body">
+                <h2 class="h6">Top 5 clientes por facturación <small class="text-muted fw-normal">(ejercicio actual, sin IVA)</small></h2>
+                <div class="fl-canvas fl-canvas-top"><canvas id="flChartTop" role="img" aria-label="Gráfica de barras horizontales: los cinco clientes que más facturan. Los datos están en la tabla siguiente."></canvas>
+                    <table class="visually-hidden" id="flTableTop"></table></div>
+                <p class="fl-empty text-muted mb-0" hidden></p>
+            </div></div>
+        </div>
+    </section>
+    <script src="{{ asset('node_modules/chart.js/dist/Chart.min.js') }}?v=2.9.4"></script>
+    <script src="{{ asset('Dinamic/Assets/JS/facturalo-dashboard.js', version = true) }}"></script>
 {% endmacro %}
 
 {% macro sectionStats(fsc) %}
