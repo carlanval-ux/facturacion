@@ -1,0 +1,28 @@
+/* Facturalo · identidad de RED TELECOM (rojo #FF0000 acciones, azul #152D56 estructura, negro #1C1C1C texto, blanco fondo). */
+:root {
+    --fl-red: #ff0000;
+    --fl-red-dark: #c80000;
+    --fl-blue: #152d56;
+    --fl-ink: #1c1c1c;
+    --bs-primary: var(--fl-red);
+    --bs-primary-rgb: 255, 0, 0;
+    --bs-link-color: var(--fl-red-dark);
+    --bs-link-hover-color: #960000;
+    --bs-body-color: var(--fl-ink);
+    --bs-body-font-family: Alexandria, "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+body { font-family: var(--bs-body-font-family); color: var(--fl-ink); }
+/* estructura: cabecera y menús en azul oscuro */
+.navbar.bg-primary, .bg-primary { background-color: var(--fl-blue) !important; }
+.navbar-dark .navbar-nav .nav-link.active, .navbar-dark .navbar-nav .nav-link:hover { color: #fff; border-bottom: 2px solid var(--fl-red); }
+/* acciones: rojo de marca */
+.btn-primary { --bs-btn-bg: var(--fl-red); --bs-btn-border-color: var(--fl-red); --bs-btn-hover-bg: #d60000; --bs-btn-hover-border-color: #d60000;
+    --bs-btn-active-bg: #b80000; --bs-btn-active-border-color: #b80000; --bs-btn-disabled-bg: var(--fl-red); --bs-btn-disabled-border-color: var(--fl-red); }
+.btn-outline-primary { --bs-btn-color: var(--fl-red-dark); --bs-btn-border-color: var(--fl-red); --bs-btn-hover-bg: var(--fl-red); --bs-btn-hover-border-color: var(--fl-red);
+    --bs-btn-active-bg: var(--fl-red); --bs-btn-active-border-color: var(--fl-red); }
+.text-primary { color: var(--fl-red-dark) !important; }
+.border-primary { border-color: var(--fl-red) !important; }
+.form-control:focus, .form-select:focus { border-color: var(--fl-blue); box-shadow: 0 0 0 .2rem rgba(21, 45, 86, .2); }
+.page-link { color: var(--fl-blue); } .page-item.active .page-link { background-color: var(--fl-blue); border-color: var(--fl-blue); }
+.nav-pills .nav-link.active, .nav-tabs .nav-link.active { color: var(--fl-blue); border-bottom-color: var(--fl-red); }
+.progress-bar { background-color: var(--fl-red); }

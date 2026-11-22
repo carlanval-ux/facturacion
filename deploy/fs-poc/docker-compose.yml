@@ -1,0 +1,23 @@
+# Uso: docker compose -f deploy/fs-poc/docker-compose.yml up -d --build  (desde la raíz del repo)
+name: fs-poc
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_ROOT_PASSWORD: poc-root-local
+      MARIADB_DATABASE: facturascripts
+    healthcheck: { test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"], interval: 5s, retries: 20 }
+    volumes: [dbdata:/var/lib/mysql]
+  fs:
+    build: { context: ../.., dockerfile: deploy/fs-poc/Dockerfile }
+    depends_on: { db: { condition: service_healthy } }
+    environment:
+      FS_DB_HOST: db
+      FS_DB_USER: root
+      FS_DB_PASS: poc-root-local
+      FS_DB_NAME: facturascripts
+      FS_INITIAL_USER: admin
+      FS_INITIAL_PASS: poc-admin-local
+    ports: ["127.0.0.1:8085:80"]   # solo loopback
+    volumes: [fsfiles:/var/www/html/MyFiles]
+volumes: { dbdata: {}, fsfiles: {} }

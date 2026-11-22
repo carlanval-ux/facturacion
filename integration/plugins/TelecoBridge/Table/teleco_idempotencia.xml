@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<table>
+    <column><name>clave</name><type>character varying(80)</type><null>NO</null></column>
+    <column><name>hash</name><type>character varying(64)</type><null>NO</null></column>
+    <column><name>estado</name><type>character varying(10)</type><null>NO</null></column>
+    <column><name>http</name><type>integer</type></column>
+    <column><name>respuesta</name><type>text</type></column>
+    <column><name>creado</name><type>timestamp</type></column>
+    <constraint><name>teleco_idempotencia_pkey</name><type>PRIMARY KEY (clave)</type></constraint>
+</table>

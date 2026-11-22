@@ -1,0 +1,46 @@
+name: FS deploy (test)
+# Construye el artefacto de FacturaScripts (+ plugin TelecoBridge, vendor de produccion), lo sube al host del TPV y llama a
+# fs-deploy-release (sudo limitado). Solo el tenant de PRUEBA: no hay job de produccion fiscal (OWNER, FS-002).
+on:
+  push: { tags: ['fs-v*'] }
+  workflow_dispatch:
+    inputs:
+      slug: { description: 'Tenant (slug)', required: false, default: '' }
+permissions: { contents: read }
+concurrency: { group: fs-deploy, cancel-in-progress: false }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.3', tools: composer:2.8 }
+      - name: Artefacto
+        run: |
+          composer install --no-dev --no-scripts --no-interaction --ignore-platform-reqs --prefer-dist
+          npm install --omit=dev --ignore-scripts --no-audit --no-fund   # bootstrap, fontawesome, jquery...: el panel los sirve desde node_modules
+          mkdir -p out/fs && git archive HEAD | tar -x -C out/fs
+          cp -r vendor out/fs/vendor && cp -r node_modules out/fs/node_modules && mkdir -p out/fs/Plugins && cp -r integration/plugins/. out/fs/Plugins/
+          rm -rf out/fs/{deploy,.github,Test,Dinamic}
+          tar -czf fs-release.tar.gz -C out fs && sha256sum fs-release.tar.gz > fs-release.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with: { name: fs-release, path: 'fs-release.tar.gz*', retention-days: 14 }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: fs-test            # secretos del entorno: FS_DEPLOY_SSH_KEY, FS_DEPLOY_KNOWN_HOSTS; variables: FS_DEPLOY_HOST, FS_DEPLOY_SLUG
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: fs-release }
+      - name: Subir y activar
+        env:
+          KEY: ${{ secrets.FS_DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.FS_DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.FS_DEPLOY_HOST }}
+          SLUGS: ${{ inputs.slug || vars.FS_DEPLOY_SLUGS }}   # uno o varios tenants separados por espacio
+        run: |
+          install -m 700 -d ~/.ssh; printf '%s\n' "$KEY" > ~/.ssh/k; chmod 600 ~/.ssh/k; printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          S="ssh -i ~/.ssh/k -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes ploi@$HOST"
+          D="fs-releases/$GITHUB_RUN_ID"
+          $S "mkdir -p $D" && scp -i ~/.ssh/k -o IdentitiesOnly=yes fs-release.tar.gz fs-release.tar.gz.sha256 "ploi@$HOST:$D/"
+          for SLUG in $SLUGS; do $S "sudo /usr/local/sbin/fs-deploy-release '$SLUG' '/home/ploi/$D/fs-release.tar.gz'"; done
