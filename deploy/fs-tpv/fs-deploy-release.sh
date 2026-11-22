@@ -16,7 +16,7 @@ as() { sudo -u "$U" "$@"; }
 PREV="$(readlink -f "$BASE/current" 2>/dev/null || true)"; R="$BASE/releases/$(date -u +%Y%m%d%H%M%S)"
 trap 'echo "fallo antes del cambio: se descarta $R" >&2; rm -rf "$R"' ERR
 
-as mkdir -p "$R" "$SH" && as tar -xzf "$ART" -C "$R" --strip-components=1
+mkdir -p "$R" "$SH" && tar -xzf "$ART" -C "$R" --strip-components=1 && chown -R "$U:$U" "$R"
 rm -rf "$R/Dinamic" "$R/MyFiles" "$R/config.php"        # Dinamic se regenera; config.php y MyFiles viven en shared
 # primera vez tras la instalacion de FS: config.php y MyFiles estan en la release vieja; se mueven a shared
 if [[ -n "$PREV" ]]; then
@@ -32,8 +32,8 @@ SOCK_HOST="$(grep -m1 -oE 'server_name [^;]+' "/etc/nginx/sites-available/fs-$SL
 revertir() { echo "fallo tras el cambio: vuelvo a ${PREV:-ninguna}" >&2; [[ -n "$PREV" ]] && as ln -sfn "$PREV" "$BASE/current"; systemctl reload "php$PHP-fpm" || true; exit 1; }
 as ln -sfn "$R" "$BASE/current"; systemctl reload "php$PHP-fpm"
 rm -rf "$SH"/MyFiles/Tmp/FileCache/* 2>/dev/null || true
-curl -fsS -m 300 -H "Host: $SOCK_HOST" http://127.0.0.1/deploy >/dev/null || revertir        # Plugins::deploy
-code="$(curl -s -o /dev/null -m 30 -w '%{http_code}' -H "Host: $SOCK_HOST" http://127.0.0.1/api/3)"
+curl -fsSk -m 300 --resolve "$SOCK_HOST:443:127.0.0.1" "https://$SOCK_HOST/deploy" >/dev/null || revertir        # Plugins::deploy
+code="$(curl -sk -o /dev/null -m 30 -w "%{http_code}" --resolve "$SOCK_HOST:443:127.0.0.1" "https://$SOCK_HOST/api/3")"
 [[ "$code" =~ ^(200|401|403)$ ]] || { echo "salud: HTTP $code" >&2; revertir; }
 ls -1dt "$BASE"/releases/*/ | tail -n +$((KEEP+1)) | xargs -r rm -rf
 echo "[fs-$SLUG] release $(basename "$R") activa (anterior: $(basename "${PREV:-ninguna}"))"

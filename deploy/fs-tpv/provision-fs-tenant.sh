@@ -23,6 +23,7 @@ trap 'echo "fallo: deshaciendo lo creado en esta ejecucion" >&2; rollback' ERR
 
 # 1) usuario y arbol (lo ya existente nunca se borra)
 id "$U" >/dev/null 2>&1 || { useradd --system --home "$BASE" --shell /usr/sbin/nologin "$U"; CREATED+=("user:$U"); }
+usermod -aG "$U" "$WEB_USER"   # nginx necesita atravesar el arbol (750) para servir y para llegar a current
 [[ -d "$BASE" ]] || { install -d -o "$U" -g "$U" -m 750 "$BASE" "$BASE/tmp" "$BASE/backups" "$BASE/releases" "$BASE/shared"; CREATED+=("tree:$BASE"); }
 
 # 2) BD y usuario MySQL con minimo privilegio sobre su propia BD
@@ -32,12 +33,13 @@ if [[ ! -f "$CONF" ]]; then
 else PASS="$(sed -n 's/^DB_PASS=//p' "$CONF")"; fi
 mysql -uroot -e "CREATE DATABASE IF NOT EXISTS \`$DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
  CREATE USER IF NOT EXISTS '$DB'@'localhost' IDENTIFIED BY '$PASS';
+ ALTER USER '$DB'@'localhost' IDENTIFIED BY '$PASS';
  GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,DROP,INDEX,REFERENCES,LOCK TABLES,CREATE TEMPORARY TABLES ON \`$DB\`.* TO '$DB'@'localhost';"
 
 # 3) codigo: primera release en releases/<sello>; `current` es un symlink. Las actualizaciones las hace fs-deploy-release
 if [[ ! -e "$BASE/current" ]]; then
   R="$BASE/releases/$(date -u +%Y%m%d%H%M%S)-initial"
-  sudo -u "$U" mkdir -p "$R" && sudo -u "$U" tar -xzf "$ARTIFACT" -C "$R" --strip-components=1
+  mkdir -p "$R" && tar -xzf "$ARTIFACT" -C "$R" --strip-components=1 && chown -R "$U:$U" "$R"   # root lee el artefacto; /home/ploi no es legible por $U
   sudo -u "$U" ln -sfn "$R" "$BASE/current"
 fi
 
@@ -67,7 +69,8 @@ EOF
 [[ -f "$POOL" ]] && CREATED+=("pool:$POOL")
 
 # 5) vhost: la API de FS (/api/3) se expone solo a Teleco; el panel de FS, no (acceso por la UI de Teleco)
-cat > "$VHOST" <<EOF
+if grep -q ssl_certificate "$VHOST" 2>/dev/null; then :  # TLS ya aplicado por certbot: no se reescribe
+else cat > "$VHOST" <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
@@ -88,6 +91,7 @@ server {
     location ~ /\.(?!well-known) { deny all; }
 }
 EOF
+fi
 ln -sf "$VHOST" "/etc/nginx/sites-enabled/fs-$SLUG.conf"; CREATED+=("vhost:$VHOST")
 php-fpm"$PHP" -t && nginx -t && systemctl reload "php$PHP-fpm" nginx
 
