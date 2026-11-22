@@ -4,6 +4,7 @@ namespace FacturaScripts\Plugins\Facturalo;
 use FacturaScripts\Core\Lib\AssetManager;
 use FacturaScripts\Core\Template\InitClass;
 use FacturaScripts\Core\Tools;
+use FacturaScripts\Plugins\Facturalo\Lib\Defaults;
 
 final class Init extends InitClass
 {
@@ -15,8 +16,21 @@ final class Init extends InitClass
             @mkdir($dir, 0775, true);
         }
         $this->cerrarPanel();
+        $this->aplicarDefectos();
         // identidad visual (se carga tras el CSS del nucleo)
         AssetManager::addCss(Tools::config('route') . '/Dinamic/Assets/CSS/facturalo.css', 10);
+    }
+
+    private function aplicarDefectos(): void
+    {
+        if (PHP_SAPI === 'cli') {
+            return;
+        }
+        try {
+            Defaults::apply();
+        } catch (\Throwable $e) {
+            // base de datos aun no instalada: se reintenta en la siguiente peticion
+        }
     }
 
     // Facturalo ES el panel de FS con marca blanca: abierto por defecto. Con FACTURALO_PANEL_CERRADO=1 (variable de entorno del pool) fuera de loopback solo se atiende la API.
