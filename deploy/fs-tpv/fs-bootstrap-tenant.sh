@@ -26,7 +26,7 @@ if c "$B/Wizard" | grep -qi 'step1'; then
   T=$(grep -i '^refresh' "$H" | sed -E 's/.*multireqtoken=//' | tr -d '\r\n'); rm -f "$H"
   c -o /dev/null "$B/Wizard?action=step3&multireqtoken=$T"
 fi
-T=$(c "$B/AdminPlugins" | tok); c -o /dev/null --data-urlencode "multireqtoken=$T" -d "action=enable&plugin=TelecoBridge" "$B/AdminPlugins"
+for PL in TelecoBridge Facturalo; do T=$(c "$B/AdminPlugins" | tok); c -o /dev/null --data-urlencode "multireqtoken=$T" -d "action=enable&plugin=$PL" "$B/AdminPlugins"; done
 mysql -uroot "$DB" <<SQL
 UPDATE settings SET properties = JSON_SET(properties, '\$.enable_api', true, '\$.codpago', 'CONT') WHERE name = 'default';
 DELETE FROM api_keys WHERE description = 'teleco-bridge';

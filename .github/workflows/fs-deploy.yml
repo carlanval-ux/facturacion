@@ -19,7 +19,7 @@ jobs:
         run: |
           composer install --no-dev --no-scripts --no-interaction --ignore-platform-reqs --prefer-dist
           mkdir -p out/fs && git archive HEAD | tar -x -C out/fs
-          cp -r vendor out/fs/vendor && mkdir -p out/fs/Plugins && cp -r integration/plugins/TelecoBridge out/fs/Plugins/
+          cp -r vendor out/fs/vendor && mkdir -p out/fs/Plugins && cp -r integration/plugins/. out/fs/Plugins/
           rm -rf out/fs/{deploy,.github,Test,node_modules,Dinamic}
           tar -czf fs-release.tar.gz -C out fs && sha256sum fs-release.tar.gz > fs-release.tar.gz.sha256
       - uses: actions/upload-artifact@v4
