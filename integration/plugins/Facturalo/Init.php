@@ -15,10 +15,10 @@ final class Init extends InitClass
         $this->cerrarPanel();
     }
 
-    // El panel de FS no es para clientes: fuera de loopback solo se atiende la API. Administracion: tunel SSH al puerto 443 del host.
+    // Facturalo ES el panel de FS con marca blanca: abierto por defecto. Con FACTURALO_PANEL_CERRADO=1 (variable de entorno del pool) fuera de loopback solo se atiende la API.
     private function cerrarPanel(): void
     {
-        if (PHP_SAPI === 'cli' || getenv('FACTURALO_PANEL_ABIERTO') === '1') {
+        if (PHP_SAPI === 'cli' || getenv('FACTURALO_PANEL_CERRADO') !== '1') {
             return;
         }
         $ip = $_SERVER['REMOTE_ADDR'] ?? '';

@@ -36,10 +36,10 @@ jobs:
           KEY: ${{ secrets.FS_DEPLOY_SSH_KEY }}
           KNOWN: ${{ secrets.FS_DEPLOY_KNOWN_HOSTS }}
           HOST: ${{ vars.FS_DEPLOY_HOST }}
-          SLUG: ${{ inputs.slug || vars.FS_DEPLOY_SLUG }}
+          SLUGS: ${{ inputs.slug || vars.FS_DEPLOY_SLUGS }}   # uno o varios tenants separados por espacio
         run: |
           install -m 700 -d ~/.ssh; printf '%s\n' "$KEY" > ~/.ssh/k; chmod 600 ~/.ssh/k; printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
           S="ssh -i ~/.ssh/k -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes ploi@$HOST"
           D="fs-releases/$GITHUB_RUN_ID"
           $S "mkdir -p $D" && scp -i ~/.ssh/k -o IdentitiesOnly=yes fs-release.tar.gz fs-release.tar.gz.sha256 "ploi@$HOST:$D/"
-          $S "sudo /usr/local/sbin/fs-deploy-release '$SLUG' '/home/ploi/$D/fs-release.tar.gz'"
+          for SLUG in $SLUGS; do $S "sudo /usr/local/sbin/fs-deploy-release '$SLUG' '/home/ploi/$D/fs-release.tar.gz'"; done
