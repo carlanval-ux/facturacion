@@ -1,0 +1,49 @@
+{% set d = fsc.views['VerifactuEmpresa'].cursor[0] %}
+{% set cert = d.data.certificado %}
+<div class="card shadow mb-3">
+    <div class="card-body">
+        <h5 class="card-title"><i class="fa-solid fa-file-shield fa-fw"></i> Verifactu — modo PRUEBAS</h5>
+        {% if not d.configurado %}
+            <div class="alert alert-warning mb-0">Servicio no configurado: define <code>FS_VERIFACTU_URL</code> y <code>FS_VERIFACTU_TOKEN</code> en config.php.</div>
+        {% elseif not d.ok %}
+            <div class="alert alert-danger mb-0">No se pudo consultar el servicio: {{ d.data.error | default('error ' ~ d.status) }}</div>
+        {% else %}
+            <p class="text-muted">Entorno: <strong>{{ d.data.entorno }}</strong>. La remisión real a la AEAT está bloqueada.</p>
+            {% if cert %}
+                <table class="table table-sm">
+                    <tr><th>Titular</th><td>{{ cert.titular_nombre }} ({{ cert.titular_nif }})</td></tr>
+                    <tr><th>Tipo</th><td>{{ cert.tipo }}</td></tr>
+                    <tr><th>Emisor</th><td>{{ cert.emisor }}</td></tr>
+                    <tr><th>Vigencia</th><td>{{ cert.valido_desde | slice(0, 10) }} → {{ cert.valido_hasta | slice(0, 10) }}
+                        {% if cert.vigente %}<span class="badge bg-success">vigente ({{ cert.dias_restantes }} días)</span>{% else %}<span class="badge bg-danger">no vigente</span>{% endif %}</td></tr>
+                    {% for a in cert.avisos %}<tr><td colspan="2" class="text-warning">{{ a }}</td></tr>{% endfor %}
+                </table>
+                <form action="" method="post" class="mb-3">
+                    {{ formToken() }}
+                    <input type="hidden" name="action" value="verifactu-revocar"/>
+                    <input type="hidden" name="activetab" value="VerifactuEmpresa"/>
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Revocar certificado</button>
+                </form>
+            {% else %}
+                <div class="alert alert-info">Esta empresa aún no tiene certificado. Sube uno para poder registrar facturas.</div>
+            {% endif %}
+            <form action="" method="post" enctype="multipart/form-data">
+                {{ formToken() }}
+                <input type="hidden" name="action" value="verifactu-cert"/>
+                <input type="hidden" name="activetab" value="VerifactuEmpresa"/>
+                <div class="row g-2">
+                    <div class="col-md-4"><label class="form-label">Certificado (.p12 / .pfx)</label><input type="file" name="p12" class="form-control" accept=".p12,.pfx" required/></div>
+                    <div class="col-md-3"><label class="form-label">Contraseña</label><input type="password" name="passphrase" class="form-control" autocomplete="off" required/></div>
+                    <div class="col-md-3"><label class="form-label">Tipo</label>
+                        <select name="tipo" class="form-select">
+                            <option value="sello_empresa">Sello de empresa</option>
+                            <option value="representante">Representante</option>
+                            <option value="colaborador_social">Colaborador social</option>
+                        </select></div>
+                    <div class="col-md-2"><label class="form-label">Ref. apoderamiento</label><input type="text" name="apoderamiento_ref" class="form-control" placeholder="solo representante / colaborador"/></div>
+                </div>
+                <button type="submit" class="btn btn-primary mt-3">{{ cert ? 'Sustituir certificado' : 'Subir certificado' }}</button>
+            </form>
+        {% endif %}
+    </div>
+</div>
