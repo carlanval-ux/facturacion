@@ -112,4 +112,4 @@ Estado dejado además: empresa 2, almacén `1`, ejercicio `B026` con plan contab
 
 ## Estado del despliegue
 
-El tag `fs-v2026.72-qa1` está creado en local pero el push fue denegado por la política de permisos de esta sesión (el despliegue lo autorizó otra sesión, no el usuario). Pendiente de que el usuario lo apruebe; hasta entonces teleco-test sigue con el código anterior, así que D1/D2 (IVA21 y venta sin stock) siguen sin verificar en vivo.
+Falta etiquetar (`fs-v2026.72-qa1`): el push del tag fue denegado por la política de permisos de esta sesión (el despliegue lo autorizó otra sesión, no el usuario). Pendiente de que el usuario lo apruebe; hasta entonces teleco-test sigue con el código anterior, así que D1/D2 (IVA21 y venta sin stock) siguen sin verificar en vivo.
