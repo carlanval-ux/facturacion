@@ -20,34 +20,8 @@
 {% extends "Master/MenuBghTemplate.html.twig" %}
 
 {% block body %}
-    <div class="bg-light pt-4 pb-5">
-        <div class="container">
-            <div class="row">
-                <div class="col">
-                    <h1 class="h4">
-                        <span class="btn-group align-bottom">
-                            <a class="btn btn-sm btn-secondary" href="{{ fsc.url() }}" title="{{ trans('refresh') }}">
-                                <i class="fa-solid fa-redo" aria-hidden="true"></i>
-                            </a>
-                            {% if fsc.getPageData().name == fsc.user.homepage %}
-                                <a class="btn btn-sm btn-secondary active"
-                                   href="{{ fsc.url() }}?defaultPage=FALSE" title="{{ trans('marked-as-homepage') }}">
-                                    <i class="fa-solid fa-bookmark" aria-hidden="true"></i>
-                                </a>
-                            {% else %}
-                                <a class="btn btn-sm btn-secondary" href="{{ fsc.url() }}?defaultPage=TRUE"
-                                   title="{{ trans('mark-as-homepage') }}">
-                                    <i class="fa-regular fa-bookmark" aria-hidden="true"></i>
-                                </a>
-                            {% endif %}
-                        </span>
-                        <span class="ms-2">{{ fsc.title }}</span>
-                    </h1>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="container" style="margin-top: -40px;">
+    <div class="container pt-2 pb-3"><h1 class="h3 mb-0">Inicio</h1></div>
+    <div class="container">
         {% if fsc.isOnboarding and fsc.firstSteps %}
             {{ _self.sectionFirstSteps(fsc) }}
         {% endif %}
@@ -138,31 +112,23 @@
 {% endmacro %}
 
 {% macro sectionLinks(fsc) %}
-    {% if fsc.createLinks %}
-        <div class="card shadow-sm mb-3">
-            <div class="card-body">
-                <h2 class="h5 mb-3">
-                    <i class="fa-solid fa-bolt fa-fw me-1 text-warning"></i>{{ trans('create') }}
-                </h2>
-                <div class="d-flex flex-wrap gap-2">
-                    {% for link, label in fsc.createLinks %}
-                        <a href="{{ link }}" class="btn btn-outline-primary">
-                            {% if link == 'EditFacturaCliente' or link == 'EditFacturaProveedor' %}
-                                <i class="fa-solid fa-file-invoice-dollar fa-fw me-1"></i>
-                            {% elseif link == 'EditCliente' %}
-                                <i class="fa-solid fa-user fa-fw me-1"></i>
-                            {% elseif link == 'EditProducto' %}
-                                <i class="fa-solid fa-box fa-fw me-1"></i>
-                            {% else %}
-                                <i class="fa-solid fa-plus fa-fw me-1"></i>
-                            {% endif %}
-                            {{ trans(label) }}
-                        </a>
-                    {% endfor %}
-                </div>
-            </div>
+    <section class="fl-hero p-4 mb-4" aria-labelledby="flHola">
+        <h2 id="flHola" class="h4 mb-1">Hola, {{ fsc.user.nick }}</h2>
+        <p class="mb-3 text-muted">¿Qué quieres hacer hoy?</p>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="EditFacturaCliente" class="btn btn-primary btn-lg"><i class="fa-solid fa-file-invoice-dollar me-2" aria-hidden="true"></i>Nueva factura</a>
+            <a href="EditCliente" class="btn btn-outline-secondary btn-lg"><i class="fa-solid fa-user-plus me-2" aria-hidden="true"></i>Nuevo cliente</a>
+            <a href="ListFacturaCliente" class="btn btn-outline-secondary btn-lg"><i class="fa-solid fa-list me-2" aria-hidden="true"></i>Ver mis facturas</a>
         </div>
-    {% endif %}
+    </section>
+    <section class="mb-4" aria-labelledby="flPasos">
+        <h2 id="flPasos" class="h5 mb-3">Cómo facturar en tres pasos</h2>
+        <div class="row g-3">
+            <div class="col-md-4"><a class="fl-step" href="EditCliente"><span class="fl-num" aria-hidden="true">1</span><span><strong>Da de alta al cliente</strong>Nombre, NIF y dirección. Solo la primera vez.</span></a></div>
+            <div class="col-md-4"><a class="fl-step" href="EditFacturaCliente"><span class="fl-num" aria-hidden="true">2</span><span><strong>Crea la factura</strong>Elige cliente, añade las líneas y guarda.</span></a></div>
+            <div class="col-md-4"><a class="fl-step" href="ListFacturaCliente"><span class="fl-num" aria-hidden="true">3</span><span><strong>Descarga o envía</strong>Abre la factura y pulsa Imprimir o Enviar por email.</span></a></div>
+        </div>
+    </section>
 {% endmacro %}
 
 {% macro sectionFirstSteps(fsc) %}
