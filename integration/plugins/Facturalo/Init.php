@@ -17,6 +17,7 @@ final class Init extends InitClass
         $this->cerrarPanel();
         // identidad visual (se carga tras el CSS del nucleo)
         AssetManager::addCss(Tools::config('route') . '/Dinamic/Assets/CSS/facturalo.css', 10);
+        AssetManager::addJs(Tools::config('route') . '/Dinamic/Assets/JS/facturalo.js', 10);
     }
 
     // Facturalo ES el panel de FS con marca blanca: abierto por defecto. Con FACTURALO_PANEL_CERRADO=1 (variable de entorno del pool) fuera de loopback solo se atiende la API.

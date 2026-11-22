@@ -140,3 +140,7 @@ a.fl-step:hover { border-color: var(--fl-blue); box-shadow: 0 2px 8px rgba(21, 4
 .fl-login footer { text-align: center; color: var(--fl-muted); font-size: .8125rem; padding: 1rem; }
 
 @media print { .fl-header { display: none !important; } body { background: #fff; } }
+
+/* botón de mostrar/ocultar contraseña */
+.fl-eye { border-color: var(--bs-border-color, #ced4da); color: #152d56; background: #fff; }
+.fl-eye:hover, .fl-eye:focus-visible { background: #eef2f7; color: #152d56; }
