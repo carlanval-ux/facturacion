@@ -23,7 +23,7 @@ trap 'echo "fallo: deshaciendo lo creado en esta ejecucion" >&2; rollback' ERR
 
 # 1) usuario y arbol (lo ya existente nunca se borra)
 id "$U" >/dev/null 2>&1 || { useradd --system --home "$BASE" --shell /usr/sbin/nologin "$U"; CREATED+=("user:$U"); }
-[[ -d "$BASE" ]] || { install -d -o "$U" -g "$U" -m 750 "$BASE" "$BASE/tmp" "$BASE/backups"; CREATED+=("tree:$BASE"); }
+[[ -d "$BASE" ]] || { install -d -o "$U" -g "$U" -m 750 "$BASE" "$BASE/tmp" "$BASE/backups" "$BASE/releases" "$BASE/shared"; CREATED+=("tree:$BASE"); }
 
 # 2) BD y usuario MySQL con minimo privilegio sobre su propia BD
 install -d -m 700 /etc/fs/tenants
@@ -34,9 +34,11 @@ mysql -uroot -e "CREATE DATABASE IF NOT EXISTS \`$DB\` CHARACTER SET utf8mb4 COL
  CREATE USER IF NOT EXISTS '$DB'@'localhost' IDENTIFIED BY '$PASS';
  GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,DROP,INDEX,REFERENCES,LOCK TABLES,CREATE TEMPORARY TABLES ON \`$DB\`.* TO '$DB'@'localhost';"
 
-# 3) codigo (solo primera instalacion; las actualizaciones son otro paso, como en el TPV)
-if [[ ! -f "$BASE/current/index.php" ]]; then
-  sudo -u "$U" mkdir -p "$BASE/current" && sudo -u "$U" tar -xzf "$ARTIFACT" -C "$BASE/current" --strip-components=1
+# 3) codigo: primera release en releases/<sello>; `current` es un symlink. Las actualizaciones las hace fs-deploy-release
+if [[ ! -e "$BASE/current" ]]; then
+  R="$BASE/releases/$(date -u +%Y%m%d%H%M%S)-initial"
+  sudo -u "$U" mkdir -p "$R" && sudo -u "$U" tar -xzf "$ARTIFACT" -C "$R" --strip-components=1
+  sudo -u "$U" ln -sfn "$R" "$BASE/current"
 fi
 
 # 4) pool PHP-FPM propio, encerrado en su arbol
