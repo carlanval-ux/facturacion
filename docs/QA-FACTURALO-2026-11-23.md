@@ -67,3 +67,49 @@ Clientes 1–3, productos SRV-FIBRA/LIB-01/HOSP-01, tarifa MAY (−15 %) y clien
 ## Skills y controles aplicados
 
 Sin skills de ingeniería cargadas (QA funcional + cambio mínimo de configuración); `reference-driven-development`: evaluada; no aplicable (sin referente que replicar, es control de calidad). Evidencias: totales contra cálculo independiente, 200 facturas, PDF inspeccionado a nivel de bytes.
+
+---
+
+# Anexo: varias empresas en una instalación (ajuste de alcance: FS como motor interno, una empresa por tenant de la plataforma)
+
+Prueba en teleco-test con una 2.ª empresa («Empresa Segunda QA SL», idempresa 2, almacén `1`, ejercicio `B026`, plan contable importado). Contra el motor por API y exportaciones.
+
+## Qué se comparte y qué se separa
+
+| Se separa por empresa | Se comparte entre todas las empresas |
+|---|---|
+| Documentos (idempresa), numeración (por serie + ejercicio + empresa: `FB026A1…` frente a `F2026A262…`), ejercicio y plan contable (subcuentas de cliente distintas: 4300000003 en B026), asientos, almacenes, formas de pago, cuentas bancarias, formatos de impresión/pie/logo, datos de empresa en el PDF | **Clientes** (sin columna de empresa), **productos y tarifas**, **series** (la serie A es la misma para todos), **impuestos y retenciones**, agentes, grupos, usuarios, claves API, plugins |
+
+## Resultados
+
+| Caso | Resultado | Evidencia |
+|---|---|---|
+| Numeración independiente por empresa/ejercicio | OK | `FB026A1–A5`, rectificativa `FB026R1` (serie R, API con `codserie=R`) frente a `F2026A262–A266` |
+| Cálculo, PDF y contabilidad de la 2.ª empresa | OK | FB026A1: 100 + 21 = 121; asiento 4300000003 D 121 / 4770000021 H 21 / 7000000000 H 100; PDF con razón social, NIF y dirección de la empresa 2 y sin el pie de la empresa 1 |
+| Cobro y rectificativa por API en la empresa 2 | OK | `pagarFacturaCliente/268` → pagada; `crearFacturaRectificativaCliente` → FB026R1, −121 |
+| Empresa de destino de `telecoFacturaCliente` | FALLO (M1) | La empresa sale de `codalmacen`; sin él se factura en la empresa por defecto (F2026A266, empresa 1). `idempresa` en el cuerpo se ignora si hay almacén |
+| Idempotencia entre empresas | FALLO (M2) | La clave era global: la misma clave con cuerpo distinto en otra empresa devuelve 422 «reused-with-different-body» (revela que existe) y, con cuerpo idéntico, repetiría la factura de otro tenant |
+| Clientes duplicados por NIF | AVISO (M3) | `POST clientes` con el NIF de un cliente existente crea el cliente 4 sin avisar |
+| Aislamiento entre usuarios | AVISO (M4) | Un usuario normal de la empresa 1 ve en el listado las facturas de la empresa 2 (CSV con `FB026A1`); la empresa del usuario es solo su valor por defecto |
+| Código de ejercicio | AVISO (M5) | `codejercicio` es único en toda la instalación (no se puede repetir «2026») y limitado a 1–4 caracteres: hay que repartir códigos por empresa y año (aquí `B026`) |
+| API key | AVISO (M6) | No está ligada a una empresa: la misma clave puede facturar a cualquier cliente de cualquier empresa |
+
+## Defectos nuevos y correcciones
+
+| ID | Sev. | Defecto | Estado |
+|---|---|---|---|
+| M1 | **Alta** | Una llamada sin `codalmacen` factura en la empresa por defecto (riesgo de mezcla entre tenants) | **Corregido** en TelecoBridge: con más de una empresa, `codalmacen` es obligatorio y debe existir (400). Con una sola empresa no cambia nada |
+| M2 | **Alta** | Clave de idempotencia global | **Corregido**: con varias empresas la clave se guarda ligada a la empresa (`sha256(empresa|clave)`); con una sola, igual que antes (compatible con lo ya reservado) |
+| M3 | Media | NIF duplicado permitido en clientes | Abierto: la plataforma debe buscar por NIF antes de crear, o usar un cliente por tenant con prefijo propio |
+| M4 | Media | Sin aislamiento por empresa entre usuarios del panel | Abierto: irrelevante si los clientes nunca ven FS; el acceso es solo por API/administración |
+| M5 | Media | Códigos de ejercicio globales y de 4 caracteres | Abierto: el alta de tenant debe asignar un código libre (p. ej. contador base 36) y crear/importar plan contable |
+| M6 | Media | API key sin ámbito de empresa | Abierto: el aislamiento lo tiene que garantizar la plataforma (tabla tenant→empresa/almacén/cliente) o una clave por tenant con `ApiAccess` y comprobación en un controlador propio |
+| D5 (revisado) | Baja | La numeración rellena el primer hueco libre: tras borrar el borrador 262, la factura siguiente tomó el 262 (fecha posterior a la 264) | Documentado |
+
+Las correcciones M1/M2 (`integration/plugins/TelecoBridge/Controller/ApiTelecoFacturaCliente.php`, con `Test/main/IdempotencyScopeTest.php`) pasan `php -l`; el test no se ha podido ejecutar y **no están desplegadas** (ver estado del despliegue).
+
+Estado dejado además: empresa 2, almacén `1`, ejercicio `B026` con plan contable, facturas `FB026A1–A5` y rectificativa `FB026R1`, cliente duplicado 4.
+
+## Estado del despliegue
+
+El tag `fs-v2026.72-qa1` está creado en local pero el push fue denegado por la política de permisos de esta sesión (el despliegue lo autorizó otra sesión, no el usuario). Pendiente de que el usuario lo apruebe; hasta entonces teleco-test sigue con el código anterior, así que D1/D2 (IVA21 y venta sin stock) siguen sin verificar en vivo.

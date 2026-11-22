@@ -9,6 +9,7 @@ use FacturaScripts\Core\Response;
  * POST /api/3/telecoFacturaCliente con cabecera Idempotency-Key. Mismo cuerpo que crearFacturaCliente.
  * La clave se reserva con INSERT sobre PRIMARY KEY (atómico): una repetición nunca crea una segunda factura.
  * Misma clave + mismo cuerpo → misma respuesta (cabecera Idempotent-Replay: true). Misma clave + cuerpo distinto → 422.
+ * Con varias empresas en la instalacion (una por tenant de la plataforma) exige codalmacen (la empresa sale del almacen; sin el, el nucleo factura en la empresa por defecto) y la clave de idempotencia se separa por empresa.
  * shortcut: una reserva "pendiente" por caída del proceso exige revisión manual (409); sin reclamación automática.
  */
 class ApiTelecoFacturaCliente extends ApiCreateDocument
@@ -30,6 +31,18 @@ class ApiTelecoFacturaCliente extends ApiCreateDocument
             $this->fail(Response::HTTP_BAD_REQUEST, 'Idempotency-Key header is required (8-80 chars: A-Za-z0-9_.:-)');
             return;
         }
+
+        $scope = null;
+        if (FacturaScriptsDinamicModelEmpresa::count() > 1) {
+            $almacen = new FacturaScriptsDinamicModelAlmacen();
+            $codalmacen = (string)$this->request->input('codalmacen', '');
+            if ('' === $codalmacen || false === $almacen->load($codalmacen)) {
+                $this->fail(Response::HTTP_BAD_REQUEST, 'codalmacen is required and must exist when the installation has several companies');
+                return;
+            }
+            $scope = (int)$almacen->idempresa;
+        }
+        $key = self::scopedKey($key, $scope);
 
         $body = $this->request->request->all();
         ksort($body);
@@ -55,6 +68,12 @@ class ApiTelecoFacturaCliente extends ApiCreateDocument
         }
         // fallo: se libera la clave para que el cliente pueda reintentar
         $db->exec('DELETE FROM teleco_idempotencia WHERE clave = ' . $k);
+    }
+
+    /** Sin varias empresas la clave se guarda tal cual (compatible con lo ya reservado); con varias, se liga a la empresa. */
+    public static function scopedKey(string $key, ?int $idempresa): string
+    {
+        return null === $idempresa ? $key : substr(hash('sha256', $idempresa . '|' . $key), 0, 64);
     }
 
     private function replay(DataBase $db, string $k, string $hash): void
