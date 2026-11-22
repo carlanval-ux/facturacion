@@ -18,9 +18,10 @@ jobs:
       - name: Artefacto
         run: |
           composer install --no-dev --no-scripts --no-interaction --ignore-platform-reqs --prefer-dist
+          npm install --omit=dev --ignore-scripts --no-audit --no-fund   # bootstrap, fontawesome, jquery...: el panel los sirve desde node_modules
           mkdir -p out/fs && git archive HEAD | tar -x -C out/fs
-          cp -r vendor out/fs/vendor && mkdir -p out/fs/Plugins && cp -r integration/plugins/. out/fs/Plugins/
-          rm -rf out/fs/{deploy,.github,Test,node_modules,Dinamic}
+          cp -r vendor out/fs/vendor && cp -r node_modules out/fs/node_modules && mkdir -p out/fs/Plugins && cp -r integration/plugins/. out/fs/Plugins/
+          rm -rf out/fs/{deploy,.github,Test,Dinamic}
           tar -czf fs-release.tar.gz -C out fs && sha256sum fs-release.tar.gz > fs-release.tar.gz.sha256
       - uses: actions/upload-artifact@v4
         with: { name: fs-release, path: 'fs-release.tar.gz*', retention-days: 14 }
