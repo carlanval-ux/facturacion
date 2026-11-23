@@ -3,6 +3,8 @@ namespace FacturaScripts\Plugins\TelecoBridge\Controller;
 
 use FacturaScripts\Core\Base\DataBase;
 use FacturaScripts\Core\Controller\ApiCreateDocument;
+use FacturaScripts\Dinamic\Model\Almacen;
+use FacturaScripts\Dinamic\Model\Empresa;
 use FacturaScripts\Core\Response;
 
 /**
@@ -33,8 +35,8 @@ class ApiTelecoFacturaCliente extends ApiCreateDocument
         }
 
         $scope = null;
-        if (FacturaScriptsDinamicModelEmpresa::count() > 1) {
-            $almacen = new FacturaScriptsDinamicModelAlmacen();
+        if (Empresa::count() > 1) {
+            $almacen = new Almacen();
             $codalmacen = (string)$this->request->input('codalmacen', '');
             if ('' === $codalmacen || false === $almacen->load($codalmacen)) {
                 $this->fail(Response::HTTP_BAD_REQUEST, 'codalmacen is required and must exist when the installation has several companies');
