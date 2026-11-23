@@ -20,34 +20,8 @@
 {% extends "Master/MenuBghTemplate.html.twig" %}
 
 {% block body %}
-    <div class="bg-light pt-4 pb-5">
-        <div class="container">
-            <div class="row">
-                <div class="col">
-                    <h1 class="h4">
-                        <span class="btn-group align-bottom">
-                            <a class="btn btn-sm btn-secondary" href="{{ fsc.url() }}" title="{{ trans('refresh') }}">
-                                <i class="fa-solid fa-redo" aria-hidden="true"></i>
-                            </a>
-                            {% if fsc.getPageData().name == fsc.user.homepage %}
-                                <a class="btn btn-sm btn-secondary active"
-                                   href="{{ fsc.url() }}?defaultPage=FALSE" title="{{ trans('marked-as-homepage') }}">
-                                    <i class="fa-solid fa-bookmark" aria-hidden="true"></i>
-                                </a>
-                            {% else %}
-                                <a class="btn btn-sm btn-secondary" href="{{ fsc.url() }}?defaultPage=TRUE"
-                                   title="{{ trans('mark-as-homepage') }}">
-                                    <i class="fa-regular fa-bookmark" aria-hidden="true"></i>
-                                </a>
-                            {% endif %}
-                        </span>
-                        <span class="ms-2">{{ fsc.title }}</span>
-                    </h1>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="container" style="margin-top: -40px;">
+    <div class="container pt-2 pb-3"><h1 class="h3 mb-0">Inicio</h1></div>
+    <div class="container">
         {% if fsc.isOnboarding and fsc.firstSteps %}
             {{ _self.sectionFirstSteps(fsc) }}
         {% endif %}
@@ -75,6 +49,9 @@
             {% block sectionStats %}
                 {{ _self.sectionStats(fsc) }}
             {% endblock %}
+            {% if fsc.stats['sales'] is defined %}
+                {{ _self.sectionCharts() }}
+            {% endif %}
             {% for includeView in getIncludeViews('Dashboard', 'sectionStatsAfter') %}
                 {% include includeView['path'] %}
             {% endfor %}
@@ -138,31 +115,23 @@
 {% endmacro %}
 
 {% macro sectionLinks(fsc) %}
-    {% if fsc.createLinks %}
-        <div class="card shadow-sm mb-3">
-            <div class="card-body">
-                <h2 class="h5 mb-3">
-                    <i class="fa-solid fa-bolt fa-fw me-1 text-warning"></i>{{ trans('create') }}
-                </h2>
-                <div class="d-flex flex-wrap gap-2">
-                    {% for link, label in fsc.createLinks %}
-                        <a href="{{ link }}" class="btn btn-outline-primary">
-                            {% if link == 'EditFacturaCliente' or link == 'EditFacturaProveedor' %}
-                                <i class="fa-solid fa-file-invoice-dollar fa-fw me-1"></i>
-                            {% elseif link == 'EditCliente' %}
-                                <i class="fa-solid fa-user fa-fw me-1"></i>
-                            {% elseif link == 'EditProducto' %}
-                                <i class="fa-solid fa-box fa-fw me-1"></i>
-                            {% else %}
-                                <i class="fa-solid fa-plus fa-fw me-1"></i>
-                            {% endif %}
-                            {{ trans(label) }}
-                        </a>
-                    {% endfor %}
-                </div>
-            </div>
+    <section class="fl-hero p-4 mb-4" aria-labelledby="flHola">
+        <h2 id="flHola" class="h4 mb-1">Hola, {{ fsc.user.nick }}</h2>
+        <p class="mb-3 text-muted">¿Qué quieres hacer hoy?</p>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="EditFacturaCliente" class="btn btn-primary btn-lg"><i class="fa-solid fa-file-invoice-dollar me-2" aria-hidden="true"></i>Nueva factura</a>
+            <a href="EditCliente" class="btn btn-outline-secondary btn-lg"><i class="fa-solid fa-user-plus me-2" aria-hidden="true"></i>Nuevo cliente</a>
+            <a href="ListFacturaCliente" class="btn btn-outline-secondary btn-lg"><i class="fa-solid fa-list me-2" aria-hidden="true"></i>Ver mis facturas</a>
         </div>
-    {% endif %}
+    </section>
+    <section class="mb-4" aria-labelledby="flPasos">
+        <h2 id="flPasos" class="h5 mb-3">Cómo facturar en tres pasos</h2>
+        <div class="row g-3">
+            <div class="col-md-4"><a class="fl-step" href="EditCliente"><span class="fl-num" aria-hidden="true">1</span><span><strong>Da de alta al cliente</strong>Nombre, NIF y dirección. Solo la primera vez.</span></a></div>
+            <div class="col-md-4"><a class="fl-step" href="EditFacturaCliente"><span class="fl-num" aria-hidden="true">2</span><span><strong>Crea la factura</strong>Elige cliente, añade las líneas y guarda.</span></a></div>
+            <div class="col-md-4"><a class="fl-step" href="ListFacturaCliente"><span class="fl-num" aria-hidden="true">3</span><span><strong>Descarga o envía</strong>Abre la factura y pulsa Imprimir o Enviar por email.</span></a></div>
+        </div>
+    </section>
 {% endmacro %}
 
 {% macro sectionFirstSteps(fsc) %}
@@ -350,6 +319,37 @@
             </table>
         </div>
     </div>
+{% endmacro %}
+
+{% macro sectionCharts() %}
+    <section class="row g-3 mb-4" id="flCharts" aria-label="Gráficas de ventas">
+        <div class="col-lg-8">
+            <div class="card h-100 fl-chart"><div class="card-body">
+                <h2 class="h6">Ventas de los últimos 12 meses <small class="text-muted fw-normal">(sin IVA)</small></h2>
+                <div class="fl-canvas"><canvas id="flChartMonthly" role="img" aria-label="Gráfica de barras: ventas mensuales de los últimos 12 meses. Los datos están en la tabla siguiente."></canvas>
+                    <table class="visually-hidden" id="flTableMonthly"></table></div>
+                <p class="fl-empty text-muted mb-0" hidden></p>
+            </div></div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100 fl-chart"><div class="card-body">
+                <h2 class="h6">Facturas por estado <small class="text-muted fw-normal">(ejercicio actual)</small></h2>
+                <div class="fl-canvas"><canvas id="flChartStatus" role="img" aria-label="Gráfico de anillo: facturas cobradas, pendientes y vencidas. Los datos están en la tabla siguiente."></canvas>
+                    <table class="visually-hidden" id="flTableStatus"></table></div>
+                <p class="fl-empty text-muted mb-0" hidden></p>
+            </div></div>
+        </div>
+        <div class="col-12">
+            <div class="card fl-chart"><div class="card-body">
+                <h2 class="h6">Top 5 clientes por facturación <small class="text-muted fw-normal">(ejercicio actual, sin IVA)</small></h2>
+                <div class="fl-canvas fl-canvas-top"><canvas id="flChartTop" role="img" aria-label="Gráfica de barras horizontales: los cinco clientes que más facturan. Los datos están en la tabla siguiente."></canvas>
+                    <table class="visually-hidden" id="flTableTop"></table></div>
+                <p class="fl-empty text-muted mb-0" hidden></p>
+            </div></div>
+        </div>
+    </section>
+    <script src="{{ asset('node_modules/chart.js/dist/Chart.min.js') }}?v=2.9.4"></script>
+    <script src="{{ asset('Dinamic/Assets/JS/facturalo-dashboard.js', version = true) }}"></script>
 {% endmacro %}
 
 {% macro sectionStats(fsc) %}
