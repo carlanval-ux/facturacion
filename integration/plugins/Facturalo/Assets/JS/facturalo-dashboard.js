@@ -5,8 +5,8 @@
     var root = document.getElementById('flCharts');
     if (!root || typeof Chart === 'undefined') { return; }
 
-    function eur(v, cur) {
-        try { return new Intl.NumberFormat('es-ES', {style: 'currency', currency: cur || 'EUR', maximumFractionDigits: 0}).format(v); }
+    function eur(v, cur, compact) {
+        try { return new Intl.NumberFormat('es-ES', {style: 'currency', currency: cur || 'EUR', maximumFractionDigits: 0, notation: compact ? 'compact' : 'standard'}).format(v); }
         catch (e) { return Math.round(v) + ' ' + cur; }
     }
     function el(id) { return document.getElementById(id); }
@@ -39,7 +39,7 @@
                 type: 'bar',
                 data: {labels: labels, datasets: [{data: m.map(function (x) { return x.total; }), backgroundColor: BLUE}]},
                 options: {maintainAspectRatio: false, legend: {display: false},
-                    scales: {yAxes: [{ticks: {beginAtZero: true, callback: function (v) { return eur(v, cur); }}}]},
+                    scales: {yAxes: [{ticks: {beginAtZero: true, callback: function (v) { return eur(v, cur, true); }}}]},
                     tooltips: {callbacks: {label: function (t) { return eur(t.yLabel, cur); }}}}
             });
             table('flTableMonthly', ['Ventas mensuales (sin IVA)', 'Mes', 'Importe'],
@@ -66,9 +66,9 @@
         } else {
             new Chart(el('flChartTop'), {
                 type: 'horizontalBar',
-                data: {labels: t.map(function (x) { return x.name; }), datasets: [{data: t.map(function (x) { return x.total; }), backgroundColor: BLUE}]},
+                data: {labels: t.map(function (x) { return x.name.length > 20 ? x.name.slice(0, 19) + '…' : x.name; }), datasets: [{data: t.map(function (x) { return x.total; }), backgroundColor: BLUE}]},
                 options: {maintainAspectRatio: false, legend: {display: false},
-                    scales: {xAxes: [{ticks: {beginAtZero: true, callback: function (v) { return eur(v, cur); }}}]},
+                    scales: {xAxes: [{ticks: {beginAtZero: true, callback: function (v) { return eur(v, cur, true); }}}]},
                     tooltips: {callbacks: {label: function (x) { return eur(x.xLabel, cur); }}}}
             });
             table('flTableTop', ['Top 5 clientes por facturación (ejercicio actual)', 'Cliente', 'Facturado'],
