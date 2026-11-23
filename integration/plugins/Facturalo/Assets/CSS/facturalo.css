@@ -145,34 +145,8 @@ a.fl-step:hover { border-color: var(--fl-blue); box-shadow: 0 2px 8px rgba(21, 4
 .fl-eye { border-color: var(--bs-border-color, #ced4da); color: #152d56; background: #fff; }
 .fl-eye:hover, .fl-eye:focus-visible { background: #eef2f7; color: #152d56; }
 
-/* ---------- botones: un solo lenguaje de color ----------
- * rojo de marca = acción principal; azul oscuro = secundarias; gris = neutras; rojo oscuro = borrar.
- * Se reconducen los colores semánticos de FacturaScripts (celeste, verde, ámbar, negro) a esa paleta. */
-.btn-success, .btn-warning { --bs-btn-color: #fff; --bs-btn-bg: var(--fl-action); --bs-btn-border-color: var(--fl-action); --bs-btn-hover-color: #fff;
-    --bs-btn-hover-bg: var(--fl-action-hover); --bs-btn-hover-border-color: var(--fl-action-hover); --bs-btn-active-color: #fff; --bs-btn-active-bg: #990000; --bs-btn-active-border-color: #990000;
-    --bs-btn-disabled-color: #fff; --bs-btn-disabled-bg: var(--fl-action); --bs-btn-disabled-border-color: var(--fl-action); }
-.btn-info, .btn-dark { --bs-btn-color: #fff; --bs-btn-bg: var(--fl-blue); --bs-btn-border-color: var(--fl-blue); --bs-btn-hover-color: #fff;
-    --bs-btn-hover-bg: var(--fl-blue-soft); --bs-btn-hover-border-color: var(--fl-blue-soft); --bs-btn-active-color: #fff; --bs-btn-active-bg: #0f2242; --bs-btn-active-border-color: #0f2242;
-    --bs-btn-disabled-color: #fff; --bs-btn-disabled-bg: var(--fl-blue); --bs-btn-disabled-border-color: var(--fl-blue); }
-.btn-light { --bs-btn-color: var(--fl-ink); --bs-btn-bg: #e6eaf1; --bs-btn-border-color: #c9d0dc; --bs-btn-hover-color: var(--fl-ink); --bs-btn-hover-bg: #d6dce8; --bs-btn-hover-border-color: #b5bfd0; }
-.btn-danger { --bs-btn-color: #fff; --bs-btn-bg: #7a0000; --bs-btn-border-color: #7a0000; --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #5c0000; --bs-btn-hover-border-color: #5c0000;
-    --bs-btn-active-color: #fff; --bs-btn-active-bg: #4a0000; --bs-btn-active-border-color: #4a0000; --bs-btn-disabled-color: #fff; --bs-btn-disabled-bg: #7a0000; --bs-btn-disabled-border-color: #7a0000; }
-.btn-outline-success, .btn-outline-warning { --bs-btn-color: var(--fl-action-hover); --bs-btn-border-color: var(--fl-action); --bs-btn-hover-color: #fff; --bs-btn-hover-bg: var(--fl-action); --bs-btn-hover-border-color: var(--fl-action); --bs-btn-active-bg: var(--fl-action); --bs-btn-active-border-color: var(--fl-action); }
-.btn-outline-info, .btn-outline-dark { --bs-btn-color: var(--fl-blue); --bs-btn-border-color: var(--fl-blue); --bs-btn-hover-color: #fff; --bs-btn-hover-bg: var(--fl-blue); --bs-btn-hover-border-color: var(--fl-blue); --bs-btn-active-bg: var(--fl-blue); --bs-btn-active-border-color: var(--fl-blue); }
-.btn-outline-danger { --bs-btn-color: #7a0000; --bs-btn-border-color: #7a0000; --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #7a0000; --bs-btn-hover-border-color: #7a0000; --bs-btn-active-bg: #7a0000; --bs-btn-active-border-color: #7a0000; }
-.text-success, .text-info { color: var(--fl-blue) !important; }
-
 /* ---------- inicio: tarjetas de cifras y gráficas ---------- */
-.card-body.border-top.border-4 { border-top-color: var(--fl-blue) !important; }
 .fl-canvas { position: relative; height: 280px; }
 .fl-canvas-top { height: 230px; }
 .fl-chart h2 small { font-size: .8125rem; }
 .fl-empty { padding: 3rem 0; text-align: center; }
-
-/* ---------- campos técnicos que el cliente no necesita ver en la factura (se siguen enviando con el formulario) ---------- */
-#salesFormHeader div.mb-2:has(> input[name="numero2"]),
-#salesFormHeader div.mb-2:has(> input[name="codigoenv"]),
-#salesFormHeader div.mb-2:has(> input[name="apartado"]),
-#salesFormHeader div.mb-2:has(> input[name="tasaconv"]),
-#salesFormHeader div.mb-2:has(> input[name="femail"]),
-#salesFormHeader div.mb-2:has(> select[name="operacion"]) { display: none; }

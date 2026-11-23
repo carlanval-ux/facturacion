@@ -106,27 +106,13 @@
                         <li class="nav-item">
                             <a class="nav-link{{ template == 'Dashboard.html.twig' ? ' active' : '' }}" href="Dashboard" id="menuIconDashboard">Inicio</a>
                         </li>
-                        {% if fsc.user.admin %}
-                            {# el superadmin técnico ve el menú completo de FacturaScripts #}
-                            {% import 'Macro/Menu.html.twig' as macros %}
-                            {% for menuItem in menuManager.getMenu() %}
+                        {% import 'Macro/Menu.html.twig' as macros %}
+                        {% for menuItem in menuManager.getMenu() %}
+                            {# lo técnico (Administrador) solo lo ve el superadmin #}
+                            {% if menuItem.name != 'admin' or fsc.user.admin %}
                                 {{ macros.showMenu(menuItem) }}
-                            {% endfor %}
-                        {% else %}
-                            {# el resto: solo lo esencial, filtrado por los permisos de su rol #}
-                            {% set flSimple = [
-                                ['ListFacturaCliente', 'ListFacturaCliente', 'Facturas'],
-                                ['ListCliente', 'ListCliente', 'Clientes'],
-                                ['ListProducto', 'ListProducto', 'Productos'],
-                                ['ListFacturaCliente', 'ListFacturaCliente?activetab=ListReciboCliente', 'Cobros'],
-                                ['ListEmpresa', 'ListEmpresa', 'Ajustes de la empresa']
-                            ] %}
-                            {% for item in flSimple %}{% if fsc.user.can(item[0]) %}
-                                <li class="nav-item">
-                                    <a class="nav-link{{ item[1] == fsc.url() ? ' active' : '' }}" href="{{ item[1] }}">{{ item[2] }}</a>
-                                </li>
-                            {% endif %}{% endfor %}
-                        {% endif %}
+                            {% endif %}
+                        {% endfor %}
                     </ul>
                     <ul class="navbar-nav ms-lg-auto align-items-lg-center">
                         {% block navbarMenuIcon %}
