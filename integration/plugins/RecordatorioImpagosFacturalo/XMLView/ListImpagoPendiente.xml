@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="invoice" order="100"><widget type="text" fieldname="codigofactura"/></column>
+        <column name="customer" order="110"><widget type="text" fieldname="codcliente"/></column>
+        <column name="expiration" order="120"><widget type="date" fieldname="vencimiento"/></column>
+        <column name="amount" display="right" order="130"><widget type="money" fieldname="importe"/></column>
+        <column name="paid" display="right" order="140"><widget type="money" fieldname="liquidado"/></column>
+    </columns>
+    <rows>
+        <row type="status">
+            <option color="danger" fieldname="vencido">true</option>
+        </row>
+    </rows>
+</view>

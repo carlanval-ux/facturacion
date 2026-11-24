@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <group name="general" title="reminders-general" icon="fa-solid fa-gear" numcolumns="12">
+            <column name="enable-module" numcolumns="2" order="100"><widget type="checkbox" fieldname="activo"/></column>
+            <column name="not-before-date" numcolumns="2" order="110"><widget type="date" fieldname="desde"/></column>
+            <column name="send-from-hour" numcolumns="2" order="120"><widget type="number" fieldname="hora_ini" min="0" max="23"/></column>
+            <column name="send-until-hour" numcolumns="2" order="130"><widget type="number" fieldname="hora_fin" min="0" max="24"/></column>
+            <column name="only-working-days" numcolumns="2" order="140"><widget type="checkbox" fieldname="laborables"/></column>
+            <column name="attach-invoice-pdf" numcolumns="2" order="150"><widget type="checkbox" fieldname="adjuntar_pdf"/></column>
+            <column name="max-per-run" numcolumns="2" order="160"><widget type="number" fieldname="max_por_pasada" min="1" max="500"/></column>
+            <column name="sender-name" numcolumns="3" order="170"><widget type="text" fieldname="remitente_nombre" maxlength="100"/></column>
+            <column name="reply-to-email" numcolumns="3" order="180"><widget type="text" fieldname="remitente_email" maxlength="150"/></column>
+            <column name="excluded-customers" numcolumns="3" order="190"><widget type="textarea" fieldname="excl_clientes"/></column>
+            <column name="excluded-invoices" numcolumns="3" order="200"><widget type="textarea" fieldname="excl_facturas"/></column>
+        </group>
+        <group name="step-previo" title="reminder-step-previo" icon="fa-solid fa-envelope" description="reminder-step-help" numcolumns="12">
+            <column name="step-enabled-previo" title="step-enabled" numcolumns="2" order="300"><widget type="checkbox" fieldname="previo_activo"/></column>
+            <column name="days-before-due-previo" title="days-before-due" numcolumns="2" order="301"><widget type="number" fieldname="previo_dias" min="0" max="365"/></column>
+            <column name="email-subject-previo" title="email-subject" numcolumns="8" order="302"><widget type="text" fieldname="previo_asunto" maxlength="200"/></column>
+            <column name="email-body-previo" title="email-body" numcolumns="12" order="303"><widget type="textarea" fieldname="previo_cuerpo" rows="7"/></column>
+        </group>
+        <group name="step-dia" title="reminder-step-dia" icon="fa-solid fa-envelope" description="reminder-step-help" numcolumns="12">
+            <column name="step-enabled-dia" title="step-enabled" numcolumns="2" order="310"><widget type="checkbox" fieldname="dia_activo"/></column>
+            <column name="email-subject-dia" title="email-subject" numcolumns="10" order="312"><widget type="text" fieldname="dia_asunto" maxlength="200"/></column>
+            <column name="email-body-dia" title="email-body" numcolumns="12" order="313"><widget type="textarea" fieldname="dia_cuerpo" rows="7"/></column>
+        </group>
+        <group name="step-post1" title="reminder-step-post1" icon="fa-solid fa-envelope" description="reminder-step-help" numcolumns="12">
+            <column name="step-enabled-post1" title="step-enabled" numcolumns="2" order="320"><widget type="checkbox" fieldname="post1_activo"/></column>
+            <column name="days-after-due-post1" title="days-after-due" numcolumns="2" order="321"><widget type="number" fieldname="post1_dias" min="0" max="365"/></column>
+            <column name="email-subject-post1" title="email-subject" numcolumns="8" order="322"><widget type="text" fieldname="post1_asunto" maxlength="200"/></column>
+            <column name="email-body-post1" title="email-body" numcolumns="12" order="323"><widget type="textarea" fieldname="post1_cuerpo" rows="7"/></column>
+        </group>
+        <group name="step-post2" title="reminder-step-post2" icon="fa-solid fa-envelope" description="reminder-step-help" numcolumns="12">
+            <column name="step-enabled-post2" title="step-enabled" numcolumns="2" order="330"><widget type="checkbox" fieldname="post2_activo"/></column>
+            <column name="days-after-due-post2" title="days-after-due" numcolumns="2" order="331"><widget type="number" fieldname="post2_dias" min="0" max="365"/></column>
+            <column name="email-subject-post2" title="email-subject" numcolumns="8" order="332"><widget type="text" fieldname="post2_asunto" maxlength="200"/></column>
+            <column name="email-body-post2" title="email-body" numcolumns="12" order="333"><widget type="textarea" fieldname="post2_cuerpo" rows="7"/></column>
+        </group>
+        <group name="step-post3" title="reminder-step-post3" icon="fa-solid fa-envelope" description="reminder-step-help" numcolumns="12">
+            <column name="step-enabled-post3" title="step-enabled" numcolumns="2" order="340"><widget type="checkbox" fieldname="post3_activo"/></column>
+            <column name="days-after-due-post3" title="days-after-due" numcolumns="2" order="341"><widget type="number" fieldname="post3_dias" min="0" max="365"/></column>
+            <column name="email-subject-post3" title="email-subject" numcolumns="8" order="342"><widget type="text" fieldname="post3_asunto" maxlength="200"/></column>
+            <column name="email-body-post3" title="email-body" numcolumns="12" order="343"><widget type="textarea" fieldname="post3_cuerpo" rows="7"/></column>
+        </group>
+    </columns>
+</view>
