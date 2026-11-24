@@ -2,7 +2,7 @@
 namespace FacturaScripts\Test\Plugins;
 
 use FacturaScripts\Dinamic\Model\User;
-use FacturaScripts\Plugins\Facturalo\Controller\Login;
+use FacturaScripts\Plugins\Facturalo\Lib\LoginEmail;
 use PHPUnit\Framework\TestCase;
 
 final class LoginEmailTest extends TestCase

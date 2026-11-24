@@ -27,7 +27,7 @@ final class Init extends InitClass
     {
         try {
             LoginEmail::apply();
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
             // sin base de datos: el login funciona solo con usuario
         }
     }
