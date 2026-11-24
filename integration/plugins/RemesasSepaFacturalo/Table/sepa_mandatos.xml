@@ -27,17 +27,14 @@
     <column>
         <name>tipo</name>
         <type>character varying(4)</type>
-        <default>CORE</default>
     </column>
     <column>
         <name>secuencia</name>
         <type>character varying(4)</type>
-        <default>FRST</default>
     </column>
     <column>
         <name>estado</name>
         <type>character varying(10)</type>
-        <default>activo</default>
     </column>
     <column>
         <name>observaciones</name>

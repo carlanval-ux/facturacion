@@ -1,106 +1,92 @@
 #!/usr/bin/env bash
-# Prueba en vivo de RemesasSepaFacturalo en teleco-test (NUNCA producción). No imprime IBAN completos.
+# Prueba en vivo de RemesasSepaFacturalo en teleco-test (NUNCA producción) por API REST y web; sin CLI de PHP.
 # Uso: ssh ploi@host 'bash -s' < sepa-live.sh
-#      IDRECIBO=123 ssh ploi@host 'bash -s' < ...   (opcional: recibo PENDIENTE de una factura de PRUEBA no registrada en
-#      Verifactu, para probar remesa -> cobro -> reversión). Sin IDRECIBO solo se prueba lo que no toca recibos.
-# Crea un cliente SEPAQA, un mandato y (si no existe) un acreedor de prueba; lo borra todo al terminar.
+#   Opcional (pantallas web, PDF, XML, crear remesa):  WEB_NICK=<admin de pruebas> WEB_PASS=<clave>
+#   Opcional (remesa->cobro->reversión): IDRECIBO=<recibo PENDIENTE de una factura de PRUEBA no registrada en Verifactu>
+# Lee FS_API_KEY de ~/fs-install/teleco-test.secrets. No imprime IBAN completos, claves ni tokens. Limpia lo que crea.
 set -u
-DIR=${DIR:-/srv/fs/teleco-test/current}
-PHP=$(mktemp /tmp/sepa-XXXX.php); trap 'rm -f "$PHP"' EXIT
-ok=0; ko=0
-cat > "$PHP" <<'PHPEOF'
-<?php
-use FacturaScripts\Core\Kernel;
-use FacturaScripts\Core\Plugins;
-use FacturaScripts\Core\Tools;
-use FacturaScripts\Core\Where;
-chdir($argv[1]); define('FS_FOLDER', getcwd());
-require FS_FOLDER . '/vendor/autoload.php';
-require FS_FOLDER . '/config.php';
-date_default_timezone_set(Tools::config('timezone', 'Europe/Madrid'));
-Kernel::init(); Plugins::init();
+H=${H:-facturalo.redtelecom.app}
+SECRETS=~/fs-install/teleco-test.secrets
+[ -f "$SECRETS" ] && . "$SECRETS"
+: "${FS_API_KEY:?falta FS_API_KEY en $SECRETS}"
+ok=0; ko=0; chk() { if [ "$2" = "1" ]; then echo "PASS  $1"; ok=$((ok+1)); else echo "FAIL  $1"; ko=$((ko+1)); fi; }
+R() { curl -s --resolve $H:443:127.0.0.1 "$@"; }
+API() { m=$1; p=$2; shift 2; R -X "$m" -H "Token: $FS_API_KEY" "https://$H/api/3/$p" "$@"; }
+code() { m=$1; p=$2; shift 2; R -o /dev/null -w "%{http_code}" -X "$m" -H "Token: $FS_API_KEY" "https://$H/api/3/$p" "$@"; }
+jget() { php -r '$d=json_decode(stream_get_contents(STDIN),true); $k=$argv[1]; $d=is_array($d)&&isset($d[0])&&!isset($d[$k])?$d[0]:$d; echo is_array($d)&&isset($d[$k])?(is_bool($d[$k])?($d[$k]?"1":"0"):$d[$k]):"";' "$1"; }
+HOY=$(date +%d-%m-%Y)
+IBAN_OK=ES7921000813610123456789
+CREO_ACREEDOR=0
 
-use FacturaScripts\Dinamic\Model\Cliente;
-use FacturaScripts\Dinamic\Model\ReciboCliente;
-use FacturaScripts\Plugins\RemesasSepaFacturalo\Lib\Iban;
-use FacturaScripts\Plugins\RemesasSepaFacturalo\Lib\MandatoPdf;
-use FacturaScripts\Plugins\RemesasSepaFacturalo\Lib\ModuloActivo;
-use FacturaScripts\Plugins\RemesasSepaFacturalo\Lib\RemesaService;
-use FacturaScripts\Plugins\RemesasSepaFacturalo\Lib\SepaXml;
-use FacturaScripts\Plugins\RemesasSepaFacturalo\Model\AcreedorSepa;
-use FacturaScripts\Plugins\RemesasSepaFacturalo\Model\MandatoSepa;
-use FacturaScripts\Plugins\RemesasSepaFacturalo\Model\RemesaSepa;
-use FacturaScripts\Plugins\RemesasSepaFacturalo\Model\RemesaSepaRecibo;
+echo "== API: recursos del módulo"
+for r in acreedorsepas mandatosepas remesasepas remesaseparecibos; do
+  chk "API $r responde 200" $([ "$(code GET "$r?limit=1")" = 200 ] && echo 1 || echo 0)
+done
 
-$n = 0; $f = 0;
-function t(string $nombre, bool $c): void { global $n, $f; echo ($c ? 'PASS  ' : 'FAIL  ') . $nombre . "\n"; $c ? $n++ : $f++; }
+echo "== acreedor"
+ACR=$(API GET "acreedorsepas?filter\[idempresa\]=1&limit=1" | jget idacreedor)
+if [ -z "$ACR" ]; then
+  ACR=$(API POST acreedorsepas -d idempresa=1 -d "nombre=Empresa de prueba" -d aci=ES98ZZZ12345678A -d iban=ES9121000418450200051332 -d plazofrst=5 -d plazorcur=1 -d plazob2b=1 | jget idacreedor)
+  CREO_ACREEDOR=1
+fi
+chk "acreedor disponible" $([ -n "$ACR" ] && echo 1 || echo 0)
+chk "acreedor con ACI invalido se rechaza" $([ "$(code POST acreedorsepas -d idempresa=999 -d nombre=X -d aci=1234 -d iban=ES9121000418450200051332)" != 200 ] && echo 1 || echo 0)
 
-t('modulo activo por defecto', ModuloActivo::estaActivo('sepa'));
-t('IBAN valido / invalido', Iban::esValido('ES9121000418450200051332') && !Iban::esValido('ES9121000418450200051333'));
+echo "== cliente y mandato"
+COD=$(API POST clientes -d "nombre=SEPA QA" -d cifnif=B00000000 | jget codcliente)
+chk "cliente de prueba creado" $([ -n "$COD" ] && echo 1 || echo 0)
+MAN=$(API POST mandatosepas -d codcliente="$COD" -d iban=$IBAN_OK -d fechafirma="$HOY" -d tipo=CORE -d secuencia=FRST -d estado=activo | jget idmandato)
+chk "mandato con IBAN valido guardado" $([ -n "$MAN" ] && echo 1 || echo 0)
+REF=$(API GET "mandatosepas/$MAN" | jget referencia)
+chk "referencia generada (<=35)" $([ -n "$REF" ] && [ ${#REF} -le 35 ] && echo 1 || echo 0)
+chk "mandato con IBAN malo se rechaza" $([ "$(code POST mandatosepas -d codcliente="$COD" -d iban=ES0000000000000000000000 -d fechafirma="$HOY" -d tipo=CORE -d secuencia=FRST -d estado=activo)" != 200 ] && echo 1 || echo 0)
+chk "mandato con tipo invalido se rechaza" $([ "$(code POST mandatosepas -d codcliente="$COD" -d iban=$IBAN_OK -d fechafirma="$HOY" -d tipo=XX -d secuencia=FRST -d estado=activo)" != 200 ] && echo 1 || echo 0)
 
-$idempresa = (int)Tools::settings('default', 'idempresa', 1);
-$creoAcreedor = false;
-$a = AcreedorSepa::findWhere([Where::eq('idempresa', $idempresa)]);
-if (!$a) {
-    $a = new AcreedorSepa();
-    $a->idempresa = $idempresa; $a->nombre = 'Empresa de prueba'; $a->aci = 'ES98ZZZ12345678A';
-    $a->ibannuevo = 'ES9121000418450200051332';
-    t('acreedor guardado', $a->save());
-    $creoAcreedor = true;
-}
-t('acreedor: sin faltas', AcreedorSepa::faltas($idempresa) === []);
+WEBOK=0; JAR=$(mktemp); trap 'rm -f "$JAR"' EXIT
+if [ -n "${WEB_NICK:-}" ] && [ -n "${WEB_PASS:-}" ]; then
+  echo "== web (sesión de $WEB_NICK)"
+  T=$(R -c "$JAR" "https://$H/login" | grep -o 'name="multireqtoken" value="[^"]*"' | head -1 | sed 's/.*value="//;s/"$//')
+  R -b "$JAR" -c "$JAR" -o /dev/null -X POST "https://$H/login" --data-urlencode "fsNick=$WEB_NICK" --data-urlencode "fsPassword=$WEB_PASS" -d action=login -d "multireqtoken=$T"
+  P=$(R -b "$JAR" "https://$H/ListRemesaSepa")
+  if echo "$P" | grep -q "ListReciboPendienteSepa"; then WEBOK=1; fi
+  chk "pantalla ListRemesaSepa carga con sus pestañas" $WEBOK
+  chk "ListRemesaSepa sin la palabra FacturaScripts" $(echo "$P" | grep -qi "facturascripts" && echo 0 || echo 1)
+  if [ $WEBOK = 1 ]; then
+    PDF=$(R -b "$JAR" "https://$H/EditMandatoSepa?code=$MAN&action=sepa-mandato-pdf" | head -c 4)
+    chk "PDF del mandato (%PDF)" $([ "$PDF" = "%PDF" ] && echo 1 || echo 0)
+    chk "ficha del mandato carga" $([ "$(R -b "$JAR" -o /dev/null -w '%{http_code}' "https://$H/EditMandatoSepa?code=$MAN")" = 200 ] && echo 1 || echo 0)
+    chk "ficha del cliente carga con pestaña de mandatos" $(R -b "$JAR" "https://$H/EditCliente?code=$COD" | grep -q ListMandatoSepa && echo 1 || echo 0)
+  fi
+fi
 
-$c = new Cliente(); $c->nombre = 'SEPA QA'; $c->cifnif = 'B00000000';
-$cc = Cliente::findWhere([Where::eq('nombre', 'SEPA QA')]);
-if ($cc) { $c = $cc; } else { t('cliente de prueba creado', $c->save()); }
-$cod = $c->codcliente;
+if [ "$WEBOK" = 1 ] && [ -n "${IDRECIBO:-}" ]; then
+  echo "== remesa de extremo a extremo (recibo $IDRECIBO)"
+  RCL=$(API GET "reciboclientes/$IDRECIBO" | jget codcliente)
+  # el mandato de prueba pasa al cliente del recibo
+  API PUT "mandatosepas/$MAN" -d codcliente="$RCL" >/dev/null
+  T=$(R -b "$JAR" "https://$H/ListRemesaSepa" | grep -o 'name="multireqtoken" value="[^"]*"' | head -1 | sed 's/.*value="//;s/"$//')
+  R -b "$JAR" -o /dev/null -X POST "https://$H/ListRemesaSepa" -d action=sepa-crear-remesa -d activetab=ListReciboPendienteSepa -d "codes[]=$IDRECIBO" -d "multireqtoken=$T"
+  LIN=$(API GET "remesaseparecibos?filter\[idrecibo\]=$IDRECIBO&limit=1")
+  LID=$(echo "$LIN" | jget id); REM=$(echo "$LIN" | jget idremesa)
+  chk "remesa creada con el recibo" $([ -n "$LID" ] && echo 1 || echo 0)
+  if [ -n "$LID" ]; then
+    XML=$(R -b "$JAR" "https://$H/EditRemesaSepa?code=$REM&action=sepa-xml")
+    chk "XML pain.008.001.02 descargable" $(echo "$XML" | grep -q 'pain.008.001.02' && echo 1 || echo 0)
+    chk "XML con SeqTp y MndtId" $(echo "$XML" | grep -q '<SeqTp>' && echo "$XML" | grep -q "<MndtId>$REF" && echo 1 || echo 0)
+    chk "devolucion sin motivo rechazada" $([ "$(code PUT "remesaseparecibos/$LID" -d estado=devuelto)" != 200 ] && echo 1 || echo 0)
+    chk "cobro confirmado" $([ "$(code PUT "remesaseparecibos/$LID" -d estado=cobrado)" = 200 ] && echo 1 || echo 0)
+    chk "recibo marcado pagado" $([ "$(API GET "reciboclientes/$IDRECIBO" | jget pagado)" = 1 ] && echo 1 || echo 0)
+    chk "remesa cerrada" $([ "$(API GET "remesasepas/$REM" | jget estado)" = cerrada ] && echo 1 || echo 0)
+    # reversión
+    API PUT "reciboclientes/$IDRECIBO" -d pagado=0 >/dev/null
+    API DELETE "remesaseparecibos/$LID" >/dev/null; API DELETE "remesasepas/$REM" >/dev/null
+    chk "recibo vuelve a pendiente" $([ "$(API GET "reciboclientes/$IDRECIBO" | jget pagado)" = 0 ] && echo 1 || echo 0)
+  fi
+fi
 
-$m = new MandatoSepa();
-$m->codcliente = $cod; $m->ibannuevo = 'ES7921000813610123456789';
-t('mandato con IBAN valido guarda', $m->save());
-t('mandato: referencia generada', !empty($m->referencia) && strlen($m->referencia) <= 35);
-t('mandato: IBAN enmascarado', strpos(Iban::formato($m->iban), '*') !== false && strpos(Iban::formato($m->iban), '0123456789') === false);
-$m2 = new MandatoSepa(); $m2->codcliente = $cod; $m2->ibannuevo = 'ES0000000000000000000000';
-t('mandato con IBAN malo se rechaza', !$m2->save());
-$pdf = (new MandatoPdf())->generar($m, false);
-t('PDF del mandato generado', strncmp($pdf, '%PDF', 4) === 0 && strlen($pdf) > 1500);
-[$r0, $e0] = RemesaService::crear([], null, 'qa');
-t('remesa sin recibos rechazada', $r0 === null && $e0 !== []);
-
-$idr = (int)getenv('IDRECIBO');
-if ($idr > 0) {
-    $rec = new ReciboCliente();
-    if ($rec->load($idr) && !$rec->pagado) {
-        $m->codcliente = $rec->codcliente; $m->save();
-        [$rem, $err] = RemesaService::crear([$idr], null, 'qa');
-        t('remesa creada' . ($err ? ' (' . implode(',', $err) . ')' : ''), $rem !== null);
-        if ($rem) {
-            t('XML guardado y valido', SepaXml::validarXml($rem->xml) === []);
-            t('recibo ya no es remesable', RemesaService::crear([$idr], null, 'qa')[0] === null);
-            $l = RemesaSepaRecibo::findWhere([Where::eq('idremesa', $rem->idremesa)]);
-            $l->estado = 'devuelto'; t('devolucion sin motivo rechazada', !$l->save());
-            $l = RemesaSepaRecibo::find($l->id); $l->estado = 'cobrado';
-            t('cobro confirmado', $l->save());
-            $rec->load($idr); t('recibo marcado pagado', (bool)$rec->pagado);
-            t('remesa cerrada', RemesaSepa::find($rem->idremesa)->estado === 'cerrada');
-            // reversión
-            $rec->pagado = false; $rec->save();
-            RemesaSepaRecibo::deleteWhere([Where::eq('idremesa', $rem->idremesa)]);
-            $rem->delete();
-        }
-    } else { t('IDRECIBO existe y esta pendiente', false); }
-}
-
-// limpieza
-foreach (MandatoSepa::all([Where::eq('codcliente', $cod)]) as $x) { $x->delete(); }
-$c->delete();
-if ($creoAcreedor) { $a->delete(); }
-echo "RESULT $n $f\n";
-exit($f ? 1 : 0);
-PHPEOF
-echo "== php -l"
-for f in $(find "$DIR/Plugins/RemesasSepaFacturalo" -name '*.php'); do php -l "$f" >/dev/null 2>&1 && ok=$((ok+1)) || { echo "FAIL  php -l $f"; ko=$((ko+1)); }; done
-echo "php -l: $ok ok, $ko con error"
-if [ -f "$DIR/Plugins/RemesasSepaFacturalo/Data/pain.008.001.02.xsd" ]; then echo "XSD oficial presente: se valida contra el esquema"; else echo "AVISO: no hay Data/pain.008.001.02.xsd; solo validación estructural"; fi
-echo "== pruebas en vivo"
-php "$PHP" "$DIR"
+echo "== limpieza"
+[ -n "$MAN" ] && API DELETE "mandatosepas/$MAN" >/dev/null
+[ -n "$COD" ] && API DELETE "clientes/$COD" >/dev/null
+[ "$CREO_ACREEDOR" = 1 ] && [ -n "$ACR" ] && API DELETE "acreedorsepas/$ACR" >/dev/null
+echo "RESULT ok=$ok ko=$ko"
+[ "$ko" = 0 ]
