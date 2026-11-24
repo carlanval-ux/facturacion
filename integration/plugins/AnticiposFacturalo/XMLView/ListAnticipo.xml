@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="date" order="100">
+            <widget type="date" fieldname="fecha"/>
+        </column>
+        <column name="customer" order="110">
+            <widget type="autocomplete" fieldname="codcliente">
+                <values source="clientes" fieldcode="codcliente" fieldtitle="nombre"/>
+            </widget>
+        </column>
+        <column name="anticipo-documento" order="120">
+            <widget type="text" fieldname="codigodoc" readonly="true"/>
+        </column>
+        <column name="anticipo-factura" order="130">
+            <widget type="autocomplete" fieldname="idfactura" onclick="EditFacturaCliente" readonly="true">
+                <values source="facturascli" fieldcode="idfactura" fieldtitle="codigo"/>
+            </widget>
+        </column>
+        <column name="anticipo-total" display="right" order="140">
+            <widget type="money" fieldname="total" readonly="true"/>
+        </column>
+        <column name="anticipo-estado" display="center" order="150">
+            <widget type="select" fieldname="estado" translate="true" readonly="true">
+                <values title="anticipo-pendiente">pendiente</values>
+                <values title="anticipo-aplicado">aplicado</values>
+                <values title="anticipo-devuelto">devuelto</values>
+            </widget>
+        </column>
+        <column name="anticipo-factura-final" order="160">
+            <widget type="autocomplete" fieldname="idfacturafinal" onclick="EditFacturaCliente" readonly="true">
+                <values source="facturascli" fieldcode="idfactura" fieldtitle="codigo"/>
+            </widget>
+        </column>
+        <column name="observations" order="170">
+            <widget type="textarea" fieldname="observaciones" readonly="true"/>
+        </column>
+    </columns>
+    <rows>
+        <row type="status">
+            <option color="warning" fieldname="estado" title="anticipo-pendiente">pendiente</option>
+            <option color="success" fieldname="estado" title="anticipo-aplicado">aplicado</option>
+            <option color="secondary" fieldname="estado" title="anticipo-devuelto">devuelto</option>
+        </row>
+    </rows>
+    <modals>
+        <group name="new-anticipo" title="new-anticipo" icon="fa-solid fa-hand-holding-dollar">
+            <column name="anticipo-importe" numcolumns="6" order="100">
+                <widget type="money" fieldname="importe"/>
+            </column>
+            <column name="anticipo-porcentaje" description="anticipo-importe-o-porcentaje" numcolumns="6" order="110">
+                <widget type="percentage" fieldname="porcentaje"/>
+            </column>
+            <column name="date" numcolumns="6" order="120">
+                <widget type="date" fieldname="fecha"/>
+            </column>
+            <column name="payment-method" numcolumns="6" order="130">
+                <widget type="select" fieldname="codpago">
+                    <values source="formaspago" fieldcode="codpago" fieldtitle="descripcion"/>
+                </widget>
+            </column>
+            <column name="observations" numcolumns="12" order="140">
+                <widget type="textarea" fieldname="observaciones"/>
+            </column>
+        </group>
+        <group name="ajustes" title="anticipo-ajustes" icon="fa-solid fa-cog">
+            <column name="anticipo-serie" description="anticipo-serie-ayuda" numcolumns="12" order="100">
+                <widget type="select" fieldname="codserie" required="true">
+                    <values source="series" fieldcode="codserie" fieldtitle="descripcion"/>
+                </widget>
+            </column>
+        </group>
+    </modals>
+</view>
