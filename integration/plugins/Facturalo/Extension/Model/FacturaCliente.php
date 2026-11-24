@@ -16,6 +16,13 @@ class FacturaCliente
         return function () {
             if ((empty($this->id()) || $this->isDirty('fecha')) && FechaFutura::esFutura($this->fecha)) {
                 Tools::log()->error('fecha-factura-futura', ['%fecha%' => Tools::date($this->fecha)]);
+                // la API del núcleo solo devuelve «error al guardar» (422): aquí se responde con el motivo; la transacción abierta se revierte al cerrar
+                if (PHP_SAPI !== 'cli' && 0 === stripos((string)parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/api/')) {
+                    http_response_code(422);
+                    header('Content-Type: application/json; charset=UTF-8');
+                    echo json_encode(['status' => 'error', 'message' => Tools::trans('fecha-factura-futura', ['%fecha%' => Tools::date($this->fecha)])], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
                 return false;
             }
             return true;
