@@ -1,11 +1,14 @@
 <?php
 namespace FacturaScripts\Plugins\Facturalo;
 
+use FacturaScripts\Core\Html;
 use FacturaScripts\Core\Lib\AssetManager;
 use FacturaScripts\Core\Template\InitClass;
 use FacturaScripts\Core\Tools;
 use FacturaScripts\Plugins\Facturalo\Lib\Defaults;
 use FacturaScripts\Plugins\Facturalo\Lib\LoginEmail;
+use FacturaScripts\Plugins\Facturalo\Lib\Staff;
+use Twig\TwigFunction;
 
 final class Init extends InitClass
 {
@@ -18,10 +21,24 @@ final class Init extends InitClass
         }
         $this->cerrarPanel();
         $this->loginConEmail();
+        $this->personalDePlataforma();
         $this->aplicarDefectos();
         // identidad visual (se carga tras el CSS del nucleo)
         AssetManager::addCss(Tools::config('route') . '/Dinamic/Assets/CSS/facturalo.css', 10);
         AssetManager::addJs(Tools::config('route') . '/Dinamic/Assets/JS/facturalo.js', 10);
+    }
+
+    // lo técnico solo para el staff; el menú se filtra con la función flMenu
+    private function personalDePlataforma(): void
+    {
+        // primero la función: la plantilla del menú la usa siempre
+        Html::addFunction(new TwigFunction('flMenu', fn($item) => Staff::filterMenu($item)));
+        try {
+            Staff::seed();
+            Staff::guard();
+        } catch (\Throwable $e) {
+            // sin base de datos aún: se reintenta en la siguiente petición
+        }
     }
 
     private function loginConEmail(): void

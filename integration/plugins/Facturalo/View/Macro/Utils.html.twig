@@ -49,28 +49,7 @@
 {% endmacro %}
 
 {# Muestra un mensaje para registrar la instalación #}
-{% macro registerInstall(link = true) %}
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <div class="h4">
-                <i class="fa-solid fa-registered me-1"></i> {{ trans('register-install-ad') }}
-            </div>
-            <p class="card-text">{{ trans('register-install-ad-p') }}</p>
-        </div>
-        {% if link %}
-            <div class="card-footer p-2">
-                <a href="{{ asset('Updater') }}" class="btn btn-secondary">
-                    {{ trans('register') }}
-                </a>
-                </div>
-        {% else %}
-            <div class="card-footer p-2">
-                <button class="btn btn-secondary" type="button" data-bs-toggle="modal" data-bs-target="#modalTelemetry">
-                    {{ trans('register') }}
-                </button>
-            </div>
-        {% endif %}
-    </div>
+{% macro registerInstall(link = true) %}{# Facturalo: sin anuncio de registro #}
 {% endmacro %}
 
 {# Muestra un mensaje para actualizar la instalación #}

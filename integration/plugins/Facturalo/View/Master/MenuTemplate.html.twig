@@ -110,7 +110,7 @@
                         {% for menuItem in menuManager.getMenu() %}
                             {# lo técnico (Administrador) solo lo ve el superadmin #}
                             {% if menuItem.name != 'admin' or fsc.user.admin %}
-                                {{ macros.showMenu(menuItem) }}
+                                {{ macros.showMenu(flMenu(menuItem)) }}
                             {% endif %}
                         {% endfor %}
                     </ul>

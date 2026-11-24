@@ -32,17 +32,6 @@
                                     <p class="mb-1">
                                         <strong>{{ trans('license') }}:</strong> LGPL v3
                                     </p>
-                                    <p class="mb-1">
-                                        <strong>{{ trans('website') }}:</strong>
-                                        </p>
-                                    <p class="mb-0">
-                                        <strong>{{ trans('installation') }}:</strong>
-                                        {% if settings('default', 'telemetryinstall') %}
-                                            <span class="badge bg-success">{{ trans('registered') }}</span>
-                                        {% else %}
-                                            <span class="badge bg-warning">{{ trans('not-registered') }}</span>
-                                        {% endif %}
-                                    </p>
                                 </div>
                                 <div class="col-md-auto">
                                     <img src="{{ asset('Core/Assets/Images/horizontal-logo.png') }}" alt="Facturalo"
