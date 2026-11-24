@@ -42,7 +42,7 @@ class Recurrente extends ModelClass
         $this->unidad = 'meses';
         $this->cada = 1;
         $this->pct_primero = 100.0;
-        $this->fecha_pasada = 'prevista';
+        $this->fecha_pasada = 'ajustada';
         $this->enviar_email = false;
         $this->fecha_inicio = Tools::date();
     }
@@ -79,7 +79,7 @@ class Recurrente extends ModelClass
         if (!in_array($this->tipo, ['venta', 'compra'], true)
             || !in_array($this->tipodoc, ['factura', 'albaran', 'pedido', 'presupuesto'], true)
             || !in_array($this->unidad, ['dias', 'semanas', 'meses', 'manual'], true)
-            || !in_array($this->fecha_pasada, ['prevista', 'hoy'], true)) {
+            || !in_array($this->fecha_pasada, ['ajustada', 'prevista', 'hoy'], true)) {
             Tools::log()->warning('recurring-invalid-data');
             return false;
         }

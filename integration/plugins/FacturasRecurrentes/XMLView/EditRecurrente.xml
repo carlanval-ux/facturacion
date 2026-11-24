@@ -63,6 +63,7 @@
             <column name="recurring-first-pct" numcolumns="2" order="145"><widget type="percentage" fieldname="pct_primero"/></column>
             <column name="recurring-late-date" numcolumns="3" order="146">
                 <widget type="select" fieldname="fecha_pasada" translate="true">
+                    <values title="recurring-date-adjusted">ajustada</values>
                     <values title="recurring-date-planned">prevista</values>
                     <values title="recurring-date-today">hoy</values>
                 </widget>

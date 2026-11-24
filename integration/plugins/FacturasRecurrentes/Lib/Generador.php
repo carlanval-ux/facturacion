@@ -93,6 +93,11 @@ final class Generador
             if ($h->estado === 'procesando' && strtotime($h->actualizado) > time() - 600) {
                 return 'ocupado';
             }
+            // fecha exacta rechazada hoy: no se insiste hasta mañana (entonces se ajusta la fecha)
+            if ($h->estado === 'error' && !$manual && $r->fecha_pasada === 'prevista' && date('Y-m-d', strtotime($h->actualizado)) >= $hoy) {
+                return 'ocupado';
+            }
+            $reintentoAjustado = $h->estado === 'error' && $r->fecha_pasada === 'prevista';
         } else {
             $h->idrecurrente = $r->idrecurrente;
             $h->clave = $clave;
@@ -110,13 +115,16 @@ final class Generador
 
         $db = new DataBase();
         $db->beginTransaction();
+        $avisos = count(Tools::log()::read('', ['critical', 'error', 'warning']));
         try {
-            $doc = self::crearDocumento($r, $hoy, $prevista, $manual);
+            $doc = self::crearDocumento($r, $hoy, $prevista, $manual, $reintentoAjustado ?? false);
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollback();
             $h->estado = 'error';
-            $h->mensaje = $e->getMessage();
+            // motivo real: los avisos que el núcleo dejó en el log durante este intento
+            $motivos = array_column(array_slice(Tools::log()::read('', ['critical', 'error', 'warning']), $avisos), 'message');
+            $h->mensaje = trim(implode(' | ', array_unique($motivos)) ?: $e->getMessage());
             $h->actualizado = Tools::dateTime();
             $h->save();
             // tras demasiados fallos se pausa la plantilla para no insistir
@@ -138,7 +146,20 @@ final class Generador
         return 'ok';
     }
 
-    private static function crearDocumento(Recurrente $r, string $hoy, string $prevista, bool $manual)
+    /** Última fecha (Y-m-d) de factura en la misma serie y empresa dentro del año de $fecha. */
+    private static function ultimaFecha($doc, string $fecha): ?string
+    {
+        $anio = substr($fecha, 0, 4);
+        $ult = $doc::all([
+            Where::eq('codserie', $doc->codserie),
+            Where::eq('idempresa', $doc->idempresa),
+            Where::gte('fecha', $anio . '-01-01'),
+            Where::lte('fecha', $anio . '-12-31'),
+        ], ['fecha' => 'DESC'], 0, 1);
+        return empty($ult) ? null : Recurrencia::iso($ult[0]->fecha);
+    }
+
+    private static function crearDocumento(Recurrente $r, string $hoy, string $prevista, bool $manual, bool $ajustar = false)
     {
         $cfg = $r->config();
         $clase = '\\FacturaScripts\\Dinamic\\Model\\' . self::MODELOS[$cfg->tipo][$cfg->tipodoc];
@@ -160,7 +181,15 @@ final class Generador
         $doc->observaciones = $cfg->observaciones;
 
         // protección de fecha: nunca posterior a hoy
-        $fecha = $manual ? $hoy : Recurrencia::fechaDocumento($prevista, $hoy, (string)$r->fecha_pasada);
+        $opcion = $ajustar ? 'ajustada' : (string)$r->fecha_pasada;
+        $fecha = $manual ? $hoy : Recurrencia::fechaDocumento($prevista, $hoy, $opcion);
+        // el núcleo exige facturas en orden de fecha por serie y ejercicio: se sube a la última emitida (sin pasar de hoy)
+        if (!$manual && $opcion === 'ajustada' && $cfg->tipodoc === 'factura') {
+            $ultima = self::ultimaFecha($doc, $fecha);
+            if ($ultima && $ultima > $fecha) {
+                $fecha = min($ultima, $hoy);
+            }
+        }
         if (false === $doc->setDate(Recurrencia::fmt($fecha), date('H:i:s'))) {
             throw new \RuntimeException(Tools::trans('recurring-date-error', ['%date%' => $fecha]));
         }
