@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 # Prueba en vivo de CobrosRapidosFacturalo en teleco-test (NUNCA redtelecom). No imprime secretos.
-# Uso: ssh ploi@host 'bash -s' < cobros-live.sh   (con el plugin ya desplegado en teleco-test)
-# Cobro único, parcial, lote, anulación, fecha futura y exceso de importe. Limpia al final (borra sus facturas de prueba).
+# Uso: ssh ploi@host 'bash -s' < cobros-live.sh
+# Facturas y cliente por API REST (el CLI como ploi no puede escribir MyFiles); el cobro/anulación por los
+# controladores web con sesión de un admin de prueba; el CLI solo LEE (estado de recibos/pagos/registro).
+# Limpia usuario y clave de prueba. Las facturas/cobros de prueba (cliente 'ZZ cobros') quedan como evidencia de auditoría.
 set -u
+H=facturalo.redtelecom.app
 DIR=/srv/fs/teleco-test/current
-PHP=$(mktemp /tmp/cobros-XXXX.php); trap 'rm -f "$PHP"' EXIT
+S=$(openssl rand -hex 3)
+NICK="cbtest$S"; PASS="Cb$(openssl rand -hex 6)a1"; KEY=$(openssl rand -hex 16)
+J=$(mktemp); PHP=$(mktemp /tmp/cb-XXXX.php); trap 'rm -f "$J" "$PHP"' EXIT
+ok=0; ko=0
+chk() { if [ "$2" = "1" ]; then echo "PASS  $1"; ok=$((ok+1)); else echo "FAIL  $1"; ko=$((ko+1)); fi; }
+
 cat > "$PHP" <<'PHPEOF'
 <?php
 use FacturaScripts\Core\Kernel;
@@ -16,69 +24,128 @@ require FS_FOLDER . '/vendor/autoload.php';
 require FS_FOLDER . '/config.php';
 date_default_timezone_set(Tools::config('timezone', 'Europe/Madrid'));
 Kernel::init(); Plugins::init();
-if (!Plugins::isEnabled('CobrosRapidosFacturalo')) { Plugins::enable('CobrosRapidosFacturalo'); Plugins::deploy(); echo "INFO  plugin activado; vuelve a lanzar el script\n"; exit(0); }
-use FacturaScripts\Core\Lib\Calculator;
-use FacturaScripts\Dinamic\Model\{Cliente, FacturaCliente, FormaPago, ReciboCliente, PagoCliente};
-use FacturaScripts\Plugins\CobrosRapidosFacturalo\Lib\Cobros;
-use FacturaScripts\Plugins\CobrosRapidosFacturalo\Model\CobroRegistro;
-$ok = 0; $ko = 0;
-function chk($n, $c) { global $ok, $ko; echo ($c ? "PASS  " : "FAIL  ") . $n . "\n"; $c ? $ok++ : $ko++; }
-
-$fp = FormaPago::all([], [], 0, 1)[0] ?? null;
-if (!$fp) { echo "FAIL  no hay formas de pago\n"; exit(1); }
-$c = new Cliente(); $c->nombre = $c->razonsocial = 'ZZ cobros test ' . bin2hex(random_bytes(2)); $c->save();
-$mk = function ($importe) use ($c, $fp) {
-    $f = new FacturaCliente(); $f->setSubject($c); $f->codpago = $fp->codpago; $f->save();
-    $l = $f->getNewLine(); $l->descripcion = 'ZZ cobro'; $l->cantidad = 1; $l->pvpunitario = $importe; $l->save();
-    $ls = $f->getLines(); Calculator::calculate($f, $ls, true); $f->reload();
-    return $f;
-};
-$hoy = date('d-m-Y'); $nick = 'cobros-test'; $lote = '';
-$f1 = $mk(100); $f2 = $mk(200); $f3 = $mk(50);
-$r = fn($f) => $f->getReceipts();
-chk('cada factura tiene un recibo pendiente', count($r($f1)) === 1 && !$r($f1)[0]->pagado);
-
-echo "== 1) cobro único\n";
-$r1 = $r($f1)[0];
-chk('cobra', '' === Cobros::cobrar([$r1->idrecibo => (float)$r1->importe], $hoy, $fp->codpago, '', 'test', $nick, $lote));
-$f1->reload(); chk('factura pagada', (bool)$f1->pagada);
-chk('recibo pagado con fecha de hoy', $r($f1)[0]->pagado && strtotime($r($f1)[0]->fechapago) === strtotime($hoy));
-chk('1 pago creado', PagoCliente::count([Where::eq('idrecibo', $r1->idrecibo)]) === 1);
-chk('registro de auditoría', CobroRegistro::count([Where::eq('idrecibo', $r1->idrecibo), Where::eq('accion', 'cobro'), Where::eq('nick', $nick)]) === 1);
-
-echo "== 2) parcial\n";
-$r2 = $r($f2)[0];
-chk('cobra 80 de 200', '' === Cobros::cobrar([$r2->idrecibo => 80.0], $hoy, $fp->codpago, '', 'parcial', $nick, $lote));
-$f2->reload(); $rs = $r($f2);
-chk('2 recibos: 80 pagado + 120 pendiente', count($rs) === 2 && round($rs[0]->importe, 2) === 80.0 && $rs[0]->pagado && round($rs[1]->importe, 2) === 120.0 && !$rs[1]->pagado);
-chk('factura sigue pendiente', !$f2->pagada);
-chk('no se pasa del importe (121 > 120)', 'cobros-amount-exceeds' === Cobros::cobrar([$rs[1]->idrecibo => 121.0], $hoy, $fp->codpago, '', '', $nick, $lote));
-chk('fecha futura rechazada', 'cobros-future-date' === Cobros::cobrar([$rs[1]->idrecibo => 10.0], date('d-m-Y', strtotime('+2 days')), $fp->codpago, '', '', $nick, $lote));
-chk('nada cambió tras rechazos', !$r($f2)[1]->pagado && round($r($f2)[1]->importe, 2) === 120.0);
-
-echo "== 3) lote (resto de f2 + f3), todo o nada\n";
-$rs = $r($f2); $r3 = $r($f3)[0];
-chk('lote con un importe inválido no cobra nada', 'cobros-amount-exceeds' === Cobros::cobrar([$rs[1]->idrecibo => 120.0, $r3->idrecibo => 999.0], $hoy, $fp->codpago, '', '', $nick, $lote) && !$r($f2)[1]->pagado);
-chk('lote ok', '' === Cobros::cobrar([$rs[1]->idrecibo => 120.0, $r3->idrecibo => 50.0], $hoy, $fp->codpago, '', 'lote', $nick, $lote));
-$f2->reload(); $f3->reload();
-chk('f2 y f3 pagadas', (bool)$f2->pagada && (bool)$f3->pagada);
-chk('mismo lote en el registro', CobroRegistro::count([Where::eq('lote', $lote)]) === 2);
-
-echo "== 4) anulación\n";
-$reg = CobroRegistro::all([Where::eq('idrecibo', $r1->idrecibo), Where::eq('accion', 'cobro')])[0];
-chk('sin motivo no anula', 'cobros-reason-required' === Cobros::anular($reg->id, ' ', $nick));
-chk('anula con motivo', '' === Cobros::anular($reg->id, 'cobrada por error', $nick));
-$f1->reload();
-chk('recibo vuelve a pendiente y factura impagada', !$r($f1)[0]->pagado && !$f1->pagada);
-chk('pago de reversión (saldo 0)', abs(array_sum(array_map(fn($p) => $p->importe, PagoCliente::all([Where::eq('idrecibo', $r1->idrecibo)])))) < 0.005);
-chk('registro: cobro marcado y fila de anulación', CobroRegistro::count([Where::eq('idrecibo', $r1->idrecibo), Where::eq('anulado', true)]) === 1 && CobroRegistro::count([Where::eq('idrecibo', $r1->idrecibo), Where::eq('accion', 'anulacion')]) === 1);
-chk('no se anula dos veces', 'cobros-cant-cancel' === Cobros::anular($reg->id, 'otra vez', $nick));
-
-echo "== 5) limpieza\n";
-foreach ([$f1, $f2, $f3] as $f) { foreach ($r($f) as $rec) { CobroRegistro::deleteWhere([Where::eq('idrecibo', $rec->idrecibo)]); } }
-foreach ([$f1, $f2, $f3] as $f) { $f->reload(); if (!$f->delete()) { echo "WARN  no se pudo borrar {$f->codigo} (queda de prueba)\n"; } }
-$c->delete();
-echo "RESULTADO  PASS=$ok FAIL=$ko\n";
-exit($ko ? 1 : 0);
+switch ($argv[2]) {
+    case 'plugin': // 1 si CobrosRapidosFacturalo está activo
+        echo Plugins::isEnabled('CobrosRapidosFacturalo') ? '1' : '0';
+        break;
+    case 'user': // nick pass key
+        $u = new FacturaScripts\Dinamic\Model\User();
+        $u->nick = $argv[3]; $u->email = $argv[3] . '@example.invalid'; $u->enabled = true; $u->admin = true;
+        if (!$u->setPassword($argv[4]) || !$u->save()) { fwrite(STDERR, "no se pudo crear\n"); exit(1); }
+        $k = new FacturaScripts\Dinamic\Model\ApiKey();
+        $k->nick = $argv[3]; $k->apikey = $argv[5]; $k->enabled = true; $k->fullaccess = true; $k->description = 'cobros-live';
+        if (!$k->save()) { fwrite(STDERR, "no se pudo crear la clave\n"); exit(1); }
+        break;
+    case 'recibos': // idfactura -> "idrecibo|importe|pagado|fechapago" por línea
+        foreach (FacturaScripts\Dinamic\Model\ReciboCliente::all([Where::eq('idfactura', $argv[3])], ['numero' => 'ASC', 'idrecibo' => 'ASC']) as $r) {
+            echo $r->idrecibo . '|' . round($r->importe, 2) . '|' . ($r->pagado ? 1 : 0) . '|' . $r->fechapago . "\n";
+        }
+        break;
+    case 'pagada': // idfactura
+        $f = new FacturaScripts\Dinamic\Model\FacturaCliente(); $f->load($argv[3]); echo $f->pagada ? '1' : '0';
+        break;
+    case 'saldo': // idrecibo -> suma de pagos (cobro + reversión)
+        $t = 0; foreach (FacturaScripts\Dinamic\Model\PagoCliente::all([Where::eq('idrecibo', $argv[3])]) as $p) { $t += $p->importe; }
+        echo round($t, 2) . '|' . FacturaScripts\Dinamic\Model\PagoCliente::count([Where::eq('idrecibo', $argv[3])]);
+        break;
+    case 'registro': // idrecibo accion -> "id|anulado|nick|lote" por línea
+        foreach (FacturaScripts\Plugins\CobrosRapidosFacturalo\Model\CobroRegistro::all([Where::eq('idrecibo', $argv[3]), Where::eq('accion', $argv[4])], ['id' => 'ASC']) as $g) {
+            echo $g->id . '|' . ($g->anulado ? 1 : 0) . '|' . $g->nick . '|' . $g->lote . "\n";
+        }
+        break;
+    case 'cleanup': // nick key
+        $u = new FacturaScripts\Dinamic\Model\User(); if ($u->load($argv[3])) { $u->delete(); }
+        foreach (FacturaScripts\Dinamic\Model\ApiKey::all([Where::eq('apikey', $argv[4])]) as $k) { $k->delete(); }
+        break;
+}
 PHPEOF
-php "$PHP" "$DIR"
+php_() { php "$PHP" "$DIR" "$@"; }
+R() { curl -s --resolve $H:443:127.0.0.1 "$@"; }
+api() { R -H "Token: $KEY" "$@"; }
+tok() { R -b "$J" "$1" | grep -o 'name="multireqtoken" value="[^"]*"' | head -1 | sed 's/.*value="//;s/"$//'; }
+hoy=$(date +%d-%m-%Y); hoyiso=$(date +%Y-%m-%d); fut=$(date -d '+3 days' +%Y-%m-%d)
+jid() { grep -o '"idfactura":"\?[0-9]*' | head -1 | grep -o '[0-9]*$'; }
+
+[ "$(php_ plugin)" = "1" ] || { echo "FAIL  plugin CobrosRapidosFacturalo no activo"; exit 1; }
+php_ user "$NICK" "$PASS" "$KEY" || exit 1
+
+echo "== 0) sesión y datos (API)"
+t=$(R "https://$H/login" | grep -o 'name="multireqtoken" value="[^"]*"' | head -1 | sed 's/.*value="//;s/"$//')
+c=$(R -c "$J" -o /dev/null -w "%{http_code}" -X POST "https://$H/login" -d action=login --data-urlencode "multireqtoken=$t" --data-urlencode "fsNick=$NICK" --data-urlencode "fsPassword=$PASS")
+chk "login admin de prueba" $([ "$c" = "302" ] && echo 1 || echo 0)
+CL=$(api -X POST "https://$H/api/3/clientes" -d "nombre=ZZ cobros $S" -d "razonsocial=ZZ cobros $S" | grep -o '"codcliente":"[^"]*"' | head -1 | sed 's/.*:"//;s/"$//')
+chk "cliente creado ($CL)" $([ -n "$CL" ] && echo 1 || echo 0)
+FP=$(api "https://$H/api/3/formaspago?limit=1" | grep -o '"codpago":"[^"]*"' | head -1 | sed 's/.*:"//;s/"$//')
+chk "forma de pago ($FP)" $([ -n "$FP" ] && echo 1 || echo 0)
+mk() { api -X POST "https://$H/api/3/crearFacturaCliente" -d "codcliente=$CL" -d "codpago=$FP" --data-urlencode "lineas=[{\"descripcion\":\"ZZ cobro\",\"cantidad\":1,\"pvpunitario\":$1}]" | jid; }
+F1=$(mk 100); F2=$(mk 200); F3=$(mk 50)
+chk "3 facturas creadas ($F1 $F2 $F3)" $([ -n "$F1" ] && [ -n "$F2" ] && [ -n "$F3" ] && echo 1 || echo 0)
+[ -n "$F1" ] && [ -n "$F2" ] && [ -n "$F3" ] || { php_ cleanup "$NICK" "$KEY"; echo "RESULTADO: $ok PASS, $ko FAIL"; exit 1; }
+R1=$(php_ recibos "$F1"); chk "F1: un recibo pendiente de 100" $([ "$(echo "$R1" | wc -l)" = "1" ] && echo "$R1" | grep -q '|100|0|' && echo 1 || echo 0)
+ID1=${R1%%|*}
+
+echo "== 1) la ventana de cobro y el botón"
+P=$(R -b "$J" "https://$H/CobrarFacturas?facturas=$F1")
+chk "CobrarFacturas?facturas= -> pinta el recibo y el formulario" $(echo "$P" | grep -q "name=\"importe\[$ID1\]\"" && echo "$P" | grep -q 'name="codpago"' && echo 1 || echo 0)
+L=$(R -b "$J" "https://$H/ListFacturaCliente"); chk "ListFacturaCliente con botón cobros-open-invoices" $(echo "$L" | grep -q 'cobros-open-invoices' && echo 1 || echo 0)
+E=$(R -b "$J" "https://$H/EditFacturaCliente?code=$F1"); chk "EditFacturaCliente con botón cobros-open-invoice" $(echo "$E" | grep -q 'cobros-open-invoice' && echo 1 || echo 0)
+T=$(tok "https://$H/ListFacturaCliente")
+c=$(R -b "$J" -o /dev/null -w "%{http_code} %{redirect_url}" -X POST "https://$H/ListFacturaCliente" -d action=cobros-open-invoices --data-urlencode "multireqtoken=$T" -d "codes[]=$F1")
+chk "acción del listado redirige a CobrarFacturas ($c)" $(echo "$c" | grep -q 'CobrarFacturas?facturas=' && echo 1 || echo 0)
+
+echo "== 2) cobro único"
+T=$(tok "https://$H/CobrarFacturas?facturas=$F1")
+cobrar() { # facturas fecha total importes... (resto: -d extra)
+  f=$1; fecha=$2; shift 2
+  R -b "$J" -o /dev/null -X POST "https://$H/CobrarFacturas" -d action=cobrar --data-urlencode "multireqtoken=$T" -d "facturas=$f" -d "fecha=$fecha" -d "codpago=$FP" -d "observaciones=live" "$@"
+}
+cobrar "$F1" "$hoyiso" -d "importe[$ID1]=100"
+chk "F1 pagada" $([ "$(php_ pagada "$F1")" = "1" ] && echo 1 || echo 0)
+chk "recibo pagado con fecha de hoy" $(php_ recibos "$F1" | grep -q "^$ID1|100|1|$hoy" && echo 1 || echo 0)
+chk "saldo de pagos 100 con 1 pago" $([ "$(php_ saldo "$ID1")" = "100|1" ] && echo 1 || echo 0)
+chk "auditoría con el nick" $(php_ registro "$ID1" cobro | grep -q "|0|$NICK|" && echo 1 || echo 0)
+
+echo "== 3) parcial y controles"
+R2=$(php_ recibos "$F2"); ID2=${R2%%|*}
+T=$(tok "https://$H/CobrarFacturas?facturas=$F2")
+cobrar "$F2" "$fut" -d "importe[$ID2]=10"
+chk "fecha futura rechazada (nada cobrado)" $(php_ recibos "$F2" | grep -q "^$ID2|200|0|" && echo 1 || echo 0)
+T=$(tok "https://$H/CobrarFacturas?facturas=$F2")
+cobrar "$F2" "$hoyiso" -d "importe[$ID2]=201"
+chk "importe 201 > 200 rechazado" $(php_ recibos "$F2" | grep -q "^$ID2|200|0|" && echo 1 || echo 0)
+T=$(tok "https://$H/CobrarFacturas?facturas=$F2")
+cobrar "$F2" "$hoyiso" -d "importe[$ID2]=80"
+RS=$(php_ recibos "$F2")
+chk "parcial: 80 pagado + 120 pendiente" $([ "$(echo "$RS" | wc -l)" = "2" ] && echo "$RS" | sed -n 1p | grep -q "|80|1|" && echo "$RS" | sed -n 2p | grep -q "|120|0|" && echo 1 || echo 0)
+chk "F2 sigue impagada" $([ "$(php_ pagada "$F2")" = "0" ] && echo 1 || echo 0)
+ID2B=$(echo "$RS" | sed -n 2p | cut -d'|' -f1)
+
+echo "== 4) lote (resto de F2 + F3 con total repartido)"
+R3=$(php_ recibos "$F3"); ID3=${R3%%|*}
+T=$(tok "https://$H/CobrarFacturas?facturas=$F2,$F3")
+cobrar "$F2,$F3" "$hoyiso" -d "total=171"
+chk "total 171 > 170 rechazado" $(php_ recibos "$F3" | grep -q "^$ID3|50|0|" && echo 1 || echo 0)
+T=$(tok "https://$H/CobrarFacturas?facturas=$F2,$F3")
+cobrar "$F2,$F3" "$hoyiso" -d "total=170"
+chk "F2 y F3 pagadas" $([ "$(php_ pagada "$F2")" = "1" ] && [ "$(php_ pagada "$F3")" = "1" ] && echo 1 || echo 0)
+LT1=$(php_ registro "$ID2B" cobro | cut -d'|' -f4); LT2=$(php_ registro "$ID3" cobro | cut -d'|' -f4)
+chk "mismo lote en ambos registros ($LT1)" $([ -n "$LT1" ] && [ "$LT1" = "$LT2" ] && echo 1 || echo 0)
+
+echo "== 5) anulación"
+REG=$(php_ registro "$ID1" cobro | cut -d'|' -f1)
+T=$(tok "https://$H/ListCobroRegistro")
+R -b "$J" -o /dev/null -X POST "https://$H/ListCobroRegistro" -d action=cobros-cancel --data-urlencode "multireqtoken=$T" -d "codes[]=$REG" -d "motivo= "
+chk "sin motivo no anula" $([ "$(php_ pagada "$F1")" = "1" ] && echo 1 || echo 0)
+T=$(tok "https://$H/ListCobroRegistro")
+R -b "$J" -o /dev/null -X POST "https://$H/ListCobroRegistro" -d action=cobros-cancel --data-urlencode "multireqtoken=$T" -d "codes[]=$REG" -d "motivo=cobrada por error"
+chk "F1 impagada y recibo pendiente" $([ "$(php_ pagada "$F1")" = "0" ] && php_ recibos "$F1" | grep -q "^$ID1|100|0|" && echo 1 || echo 0)
+chk "pago de reversión: saldo 0 con 2 pagos" $([ "$(php_ saldo "$ID1")" = "0|2" ] && echo 1 || echo 0)
+chk "cobro marcado anulado y fila de anulación" $(php_ registro "$ID1" cobro | grep -q "^$REG|1|" && [ -n "$(php_ registro "$ID1" anulacion)" ] && echo 1 || echo 0)
+T=$(tok "https://$H/ListCobroRegistro")
+R -b "$J" -o /dev/null -X POST "https://$H/ListCobroRegistro" -d action=cobros-cancel --data-urlencode "multireqtoken=$T" -d "codes[]=$REG" -d "motivo=otra vez"
+chk "no se anula dos veces (1 sola anulación)" $([ "$(php_ registro "$ID1" anulacion | wc -l)" = "1" ] && echo 1 || echo 0)
+
+echo "== 6) limpieza"
+php_ cleanup "$NICK" "$KEY"
+echo "(quedan las facturas ZZ cobros $S: $F1 $F2 $F3, como evidencia)"
+echo "RESULTADO: $ok PASS, $ko FAIL"; [ $ko -eq 0 ]
