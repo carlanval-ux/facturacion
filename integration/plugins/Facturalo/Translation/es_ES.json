@@ -18,5 +18,6 @@
   "requires-core": "Requiere Facturalo %version%",
   "starting-cron": "Iniciando cron de Facturalo...",
   "telemetry-data-to-send": "Las instalaciones registradas notifican periódicamente la versión de Facturalo, PHP, país, idioma y listado de plugins.",
-  "updates-available-p": "Hay actualizaciones disponibles de Facturalo. Por favor, haz clic en el actualizador y descarga la nueva versión. Las actualizaciones corrigen fallos y añaden nuevas funciones."
+  "updates-available-p": "Hay actualizaciones disponibles de Facturalo. Por favor, haz clic en el actualizador y descarga la nueva versión. Las actualizaciones corrigen fallos y añaden nuevas funciones.",
+  "fecha-factura-futura": "No se puede emitir una factura con fecha posterior a hoy (%fecha%). Corrige la fecha para no alterar la numeración y la secuencia de las facturas."
 }
