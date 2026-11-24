@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="name" order="100"><widget type="text" fieldname="nombre"/></column>
+        <column name="customer" order="110"><widget type="text" fieldname="codcliente"/></column>
+        <column name="recurring-next" order="120"><widget type="date" fieldname="proxima"/></column>
+        <column name="recurring-active" display="center" order="130"><widget type="checkbox" fieldname="activo"/></column>
+    </columns>
+</view>

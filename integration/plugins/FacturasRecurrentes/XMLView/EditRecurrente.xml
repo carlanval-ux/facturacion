@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <group name="data" numcolumns="12">
+            <column name="id" display="none" order="90"><widget type="text" fieldname="idrecurrente" readonly="true"/></column>
+            <column name="name" numcolumns="4" order="100"><widget type="text" fieldname="nombre" maxlength="100" required="true"/></column>
+            <column name="recurring-is-group" numcolumns="2" order="105"><widget type="checkbox" fieldname="esgrupo"/></column>
+            <column name="recurring-active" numcolumns="2" order="106"><widget type="checkbox" fieldname="activo"/></column>
+            <column name="recurring-group" numcolumns="4" order="107">
+                <widget type="select" fieldname="idgrupo">
+                    <values source="recurrentes" fieldcode="idrecurrente" fieldtitle="nombre"/>
+                </widget>
+            </column>
+            <column name="recurring-kind" numcolumns="2" order="110">
+                <widget type="select" fieldname="tipo" translate="true">
+                    <values title="recurring-sale">venta</values>
+                    <values title="recurring-purchase">compra</values>
+                </widget>
+            </column>
+            <column name="customer" numcolumns="4" order="115">
+                <widget type="autocomplete" fieldname="codcliente">
+                    <values source="clientes" fieldcode="codcliente" fieldtitle="nombre"/>
+                </widget>
+            </column>
+            <column name="supplier" numcolumns="4" order="116">
+                <widget type="autocomplete" fieldname="codproveedor">
+                    <values source="proveedores" fieldcode="codproveedor" fieldtitle="nombre"/>
+                </widget>
+            </column>
+            <column name="recurring-doc-type" numcolumns="2" order="120">
+                <widget type="select" fieldname="tipodoc" translate="true" required="true">
+                    <values title="recurring-invoice">factura</values>
+                    <values title="recurring-delivery-note">albaran</values>
+                    <values title="recurring-order">pedido</values>
+                    <values title="recurring-quote">presupuesto</values>
+                </widget>
+            </column>
+            <column name="serie" numcolumns="2" order="125">
+                <widget type="select" fieldname="codserie">
+                    <values source="series" fieldcode="codserie" fieldtitle="descripcion"/>
+                </widget>
+            </column>
+            <column name="payment-method" numcolumns="2" order="130">
+                <widget type="select" fieldname="codpago">
+                    <values source="formaspago" fieldcode="codpago" fieldtitle="descripcion"/>
+                </widget>
+            </column>
+            <column name="observations" numcolumns="12" order="135"><widget type="textarea" fieldname="observaciones"/></column>
+        </group>
+        <group name="schedule" title="recurring-schedule" numcolumns="12">
+            <column name="recurring-every" numcolumns="2" order="140"><widget type="number" fieldname="cada" decimal="0" min="1"/></column>
+            <column name="recurring-unit" numcolumns="2" order="141">
+                <widget type="select" fieldname="unidad" translate="true">
+                    <values title="days">dias</values>
+                    <values title="weeks">semanas</values>
+                    <values title="months">meses</values>
+                    <values title="recurring-manual">manual</values>
+                </widget>
+            </column>
+            <column name="recurring-start" numcolumns="2" order="142"><widget type="date" fieldname="fecha_inicio"/></column>
+            <column name="recurring-end" numcolumns="2" order="143"><widget type="date" fieldname="fecha_fin"/></column>
+            <column name="recurring-next" numcolumns="2" order="144"><widget type="date" fieldname="proxima"/></column>
+            <column name="recurring-first-pct" numcolumns="2" order="145"><widget type="percentage" fieldname="pct_primero"/></column>
+            <column name="recurring-late-date" numcolumns="3" order="146">
+                <widget type="select" fieldname="fecha_pasada" translate="true">
+                    <values title="recurring-date-planned">prevista</values>
+                    <values title="recurring-date-today">hoy</values>
+                </widget>
+            </column>
+            <column name="recurring-send-email" numcolumns="3" order="147"><widget type="checkbox" fieldname="enviar_email"/></column>
+        </group>
+    </columns>
+</view>
