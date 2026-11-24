@@ -1,0 +1,102 @@
+{% extends "Master/MenuTemplate.html.twig" %}
+
+{% block body %}
+    <div class="container py-4" style="max-width:46rem">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h1 class="h5 mb-0"><i class="fa-solid fa-hand-holding-dollar fa-fw"></i> {{ trans('cobros-mark-paid') }}</h1>
+            </div>
+            {% if fsc.activo and fsc.recibos | length > 0 %}
+                <form method="post" action="{{ asset('CobrarFacturas') }}" class="card-body">
+                    {{ formToken() }}
+                    <input type="hidden" name="action" value="cobrar">
+                    <input type="hidden" name="facturas" value="{{ fsc.paramFacturas }}">
+                    <input type="hidden" name="recibos" value="{{ fsc.paramRecibos }}">
+
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>{{ trans('invoice') }}</th>
+                                    <th>{{ trans('customer') }}</th>
+                                    <th>{{ trans('expiration') }}</th>
+                                    <th class="text-end">{{ trans('cobros-pending') }}</th>
+                                    <th class="text-end" style="width:8rem">{{ trans('cobros-to-pay') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in fsc.recibos %}
+                                    <tr>
+                                        <td>{{ r.codigofactura }}</td>
+                                        <td>{{ r.codcliente }}</td>
+                                        <td>{{ r.vencimiento }}</td>
+                                        <td class="text-end">{{ r.importe | number_format(2, ',', '.') }}</td>
+                                        <td>
+                                            <input type="number" step="0.01" min="0" max="{{ r.importe }}"
+                                                   name="importe[{{ r.idrecibo }}]" value="{{ r.importe }}"
+                                                   class="form-control form-control-sm text-end">
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="3">{{ trans('total') }}</th>
+                                    <th class="text-end">{{ fsc.total | number_format(2, ',', '.') }}</th>
+                                    <th></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-sm-6">
+                            <label class="form-label" for="cobros-fecha">{{ trans('payment-date') }}</label>
+                            <input type="date" id="cobros-fecha" name="fecha" class="form-control"
+                                   value="{{ fsc.hoy }}" max="{{ fsc.hoy }}" required>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="cobros-codpago">{{ trans('payment-method') }}</label>
+                            <select id="cobros-codpago" name="codpago" class="form-select" required>
+                                {% for fp in fsc.formasPago %}
+                                    <option value="{{ fp.codpago }}" {{ fp.codpago == fsc.codpago ? 'selected' : '' }}>{{ fp.descripcion }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="cobros-cuenta">{{ trans('cobros-account') }}</label>
+                            <select id="cobros-cuenta" name="codcuenta" class="form-select">
+                                <option value="">------</option>
+                                {% for c in fsc.cuentas %}
+                                    <option value="{{ c.codcuenta }}">{{ c.descripcion }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="cobros-total">{{ trans('cobros-total-split') }}</label>
+                            <input type="number" step="0.01" min="0" max="{{ fsc.total }}" id="cobros-total" name="total"
+                                   class="form-control text-end" placeholder="{{ trans('optional') }}">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="cobros-obs">{{ trans('observations') }}</label>
+                            <textarea id="cobros-obs" name="observaciones" rows="2" class="form-control"></textarea>
+                        </div>
+                    </div>
+                    <p class="form-text mt-2 mb-3">{{ trans('cobros-total-split-help') }}</p>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ asset('ListFacturaCliente') }}" class="btn btn-secondary">{{ trans('cancel') }}</a>
+                        <button type="submit" class="btn btn-success btn-spin-action">
+                            <i class="fa-solid fa-check fa-fw"></i> {{ trans('cobros-confirm') }}
+                        </button>
+                    </div>
+                </form>
+            {% else %}
+                <div class="card-body">
+                    <p class="mb-3">{{ trans(fsc.activo ? 'cobros-nothing-to-pay' : 'cobros-module-inactive') }}</p>
+                    <a href="{{ asset('ListFacturaCliente') }}" class="btn btn-secondary">{{ trans('back') }}</a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}
