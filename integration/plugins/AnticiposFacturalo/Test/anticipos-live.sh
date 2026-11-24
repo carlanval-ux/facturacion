@@ -25,7 +25,7 @@ if (!Plugins::isEnabled('AnticiposFacturalo')) { echo "FAIL  plugin AnticiposFac
 $c = new Cliente(); if (!$c->loadWhere([Where::eq('nombre', 'Prueba Anticipos')])) { $c->nombre = 'Prueba Anticipos'; $c->cifnif = 'B00000000'; $c->save(); }
 function pedido($c, array $lineas) {
   $p = new PedidoCliente(); $p->setSubject($c); $p->save();
-  foreach ($lineas as [$desc, $precio, $imp]) { $l = $p->getNewLine(['descripcion' => $desc, 'cantidad' => 1, 'pvpunitario' => $precio, 'codimpuesto' => $imp]); $l->save(); }
+  foreach ($lineas as [$desc, $precio, $imp]) { $l = $p->getNewLine(['descripcion' => $desc, 'cantidad' => 1, 'pvpunitario' => $precio, 'codimpuesto' => $imp]); $l->setTax($imp); $l->save(); }
   $ls = $p->getLines(); Calculator::calculate($p, $ls, true); return $p;
 }
 function final_de($p, $cls = 'FacturaCliente') { $g = new BusinessDocumentGenerator(); $ok = $g->generate($p, $cls); $d = $g->getLastDocs(); return $ok ? end($d) : null; }
