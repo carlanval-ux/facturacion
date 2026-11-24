@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ * This file is part of PersonalizarEmail plugin for FacturaScripts
+ * Copyright (C) 2026 Anton Gomez
+-->
+<view>
+    <columns>
+        <group name="header" title="email-header" icon="fa-solid fa-heading" numcolumns="12">
+            <column name="name" display="none" order="0">
+                <widget type="text" fieldname="name" readonly="true" required="true"/>
+            </column>
+            <column name="hide-title" title="email-hide-title" description="email-hide-title-help" numcolumns="12" order="90">
+                <widget type="checkbox" fieldname="hidetitle"/>
+            </column>
+            <column name="email-title" title="email-title" description="email-title-help" numcolumns="4" order="100">
+                <widget type="text" fieldname="emailtitle"/>
+            </column>
+            <column name="title-font" title="email-title-font" numcolumns="3" order="110">
+                <widget type="select" fieldname="titlefont" translate="true">
+                    <values title="default"></values>
+                    <values title="Arial">Arial, Helvetica, sans-serif</values>
+                    <values title="Verdana">Verdana, Geneva, sans-serif</values>
+                    <values title="Tahoma">Tahoma, Geneva, sans-serif</values>
+                    <values title="Trebuchet MS">Trebuchet MS, Helvetica, sans-serif</values>
+                    <values title="Georgia">Georgia, serif</values>
+                    <values title="Times New Roman">Times New Roman, Times, serif</values>
+                    <values title="Courier New">Courier New, Courier, monospace</values>
+                </widget>
+            </column>
+            <column name="title-size" title="email-title-size" numcolumns="2" order="120">
+                <widget type="number" fieldname="titlesize" decimal="0" min="8" max="72"/>
+            </column>
+            <column name="title-color" title="email-color-title" numcolumns="3" order="130">
+                <widget type="color" fieldname="colortitle"/>
+            </column>
+        </group>
+        <group name="logo" title="logo" icon="fa-solid fa-image" numcolumns="12">
+            <column name="logo-position" title="email-logo-position" description="email-logo-position-help" numcolumns="4" order="100">
+                <widget type="select" fieldname="logoposition" translate="true">
+                    <values title="email-logo-before-title">top</values>
+                    <values title="email-logo-after-title">aftertitle</values>
+                    <values title="email-logo-after-body">body</values>
+                    <values title="email-logo-after-footer">footer</values>
+                    <values title="email-logo-hidden">hidden</values>
+                </widget>
+            </column>
+            <column name="logo-align" title="email-logo-align" numcolumns="4" order="110">
+                <widget type="select" fieldname="logoalign" translate="true">
+                    <values title="left">left</values>
+                    <values title="center">center</values>
+                    <values title="right">right</values>
+                </widget>
+            </column>
+            <column name="logo-embed" title="email-logo-embed" description="email-logo-embed-help" numcolumns="12" order="120">
+                <widget type="checkbox" fieldname="logoembed"/>
+            </column>
+        </group>
+        <group name="body" title="email-body" icon="fa-solid fa-align-left" numcolumns="12">
+            <column name="body-font" title="email-body-font" numcolumns="4" order="100">
+                <widget type="select" fieldname="bodyfont" translate="true">
+                    <values title="default"></values>
+                    <values title="Arial">Arial, Helvetica, sans-serif</values>
+                    <values title="Verdana">Verdana, Geneva, sans-serif</values>
+                    <values title="Tahoma">Tahoma, Geneva, sans-serif</values>
+                    <values title="Trebuchet MS">Trebuchet MS, Helvetica, sans-serif</values>
+                    <values title="Georgia">Georgia, serif</values>
+                    <values title="Times New Roman">Times New Roman, Times, serif</values>
+                    <values title="Courier New">Courier New, Courier, monospace</values>
+                </widget>
+            </column>
+            <column name="body-size" title="email-body-size" numcolumns="4" order="110">
+                <widget type="number" fieldname="bodysize" decimal="0" min="8" max="32"/>
+            </column>
+            <column name="body-color" title="email-body-color" numcolumns="4" order="120">
+                <widget type="color" fieldname="bodycolor"/>
+            </column>
+            <column name="background-color" title="email-color-bg" numcolumns="4" order="130">
+                <widget type="color" fieldname="colorbg"/>
+            </column>
+            <column name="container-color" title="email-color-container" numcolumns="4" order="140">
+                <widget type="color" fieldname="colorcontainer"/>
+            </column>
+            <column name="button-color" title="email-color-btn" numcolumns="4" order="150">
+                <widget type="color" fieldname="colorbtn"/>
+            </column>
+        </group>
+        <group name="footer" title="email-custom-footer" icon="fa-solid fa-shoe-prints" numcolumns="12">
+            <column name="footer-text" title="email-footer-text" numcolumns="12" order="100">
+                <widget type="textarea" fieldname="footertext" rows="3"/>
+            </column>
+            <column name="footer-font" title="email-footer-font" numcolumns="4" order="110">
+                <widget type="select" fieldname="footerfont" translate="true">
+                    <values title="default"></values>
+                    <values title="Arial">Arial, Helvetica, sans-serif</values>
+                    <values title="Verdana">Verdana, Geneva, sans-serif</values>
+                    <values title="Tahoma">Tahoma, Geneva, sans-serif</values>
+                    <values title="Trebuchet MS">Trebuchet MS, Helvetica, sans-serif</values>
+                    <values title="Georgia">Georgia, serif</values>
+                    <values title="Times New Roman">Times New Roman, Times, serif</values>
+                    <values title="Courier New">Courier New, Courier, monospace</values>
+                </widget>
+            </column>
+            <column name="footer-color" title="email-footer-color" numcolumns="4" order="120">
+                <widget type="color" fieldname="footercolor"/>
+            </column>
+            <column name="footer-size" title="email-footer-size" numcolumns="4" order="130">
+                <widget type="number" fieldname="footersize" decimal="0" min="6" max="32"/>
+            </column>
+        </group>
+    </columns>
+</view>

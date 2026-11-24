@@ -1,0 +1,317 @@
+{#
+    PersonalizarEmail: pestaña de vista previa de notificaciones de email.
+    Se usa en EditEmailNotification (notificación fija) y en ConfigEmail (con selector).
+    Renderiza el email con datos de ejemplo en un iframe aislado, incluyendo los
+    cambios sin guardar del formulario (asunto, cuerpo y colores).
+#}
+{% set isNotificationPage = fsc.getClassName() == 'EditEmailNotification' %}
+<style>
+    .email-preview-btn {
+        position: relative;
+        transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .email-preview-btn:active {
+        transform: scale(0.97);
+    }
+    .email-preview-btn .btn-dots {
+        display: none;
+        position: absolute;
+        inset: 0;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+    }
+    /* visibility (y no display) para que el botón conserve su ancho durante la carga */
+    .email-preview-btn.loading .btn-label {
+        visibility: hidden;
+    }
+    .email-preview-btn.loading .btn-dots {
+        display: flex;
+    }
+    .email-preview-btn .btn-dots span {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: email-preview-dot 900ms ease-in-out infinite;
+    }
+    .email-preview-btn .btn-dots span:nth-child(2) {
+        animation-delay: 150ms;
+    }
+    .email-preview-btn .btn-dots span:nth-child(3) {
+        animation-delay: 300ms;
+    }
+    @keyframes email-preview-dot {
+        0%, 60%, 100% {
+            transform: translateY(0);
+            opacity: 0.4;
+        }
+        30% {
+            transform: translateY(-4px);
+            opacity: 1;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .email-preview-btn .btn-dots span {
+            animation: email-preview-dot-fade 900ms ease-in-out infinite;
+        }
+        @keyframes email-preview-dot-fade {
+            0%, 60%, 100% {
+                opacity: 0.4;
+            }
+            30% {
+                opacity: 1;
+            }
+        }
+    }
+    /* campos del título atenuados mientras "ocultar título" está marcado */
+    .email-preview-dimmable {
+        transition: opacity 160ms ease-out;
+    }
+    .email-preview-dimmed {
+        opacity: 0.45;
+        pointer-events: none;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .email-preview-dimmable {
+            transition: none;
+        }
+    }
+</style>
+<div class="card shadow mb-4">
+    <div class="card-body">
+        <div class="row g-2 align-items-center mb-3">
+            {% if isNotificationPage %}
+                {% set firstView = fsc.views | first %}
+                <input type="hidden" id="email-preview-code" value="{{ firstView.model.primaryColumnValue() }}"/>
+            {% else %}
+                <div class="col-sm-4">
+                    <select class="form-select" id="email-preview-code">
+                        {% for notification in fsc.emailPreviewNotifications() %}
+                            <option value="{{ notification.name }}">{{ notification.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            {% endif %}
+            <div class="col-sm-auto">
+                <button type="button" class="btn btn-primary email-preview-btn" id="email-preview-refresh">
+                    <i class="fa-solid fa-rotate fa-fw"></i> {{ trans('refresh') }}
+                </button>
+            </div>
+            <div class="col-sm-3">
+                <input type="email" class="form-control" id="email-preview-to" placeholder="{{ trans('email') }}"
+                       value="{{ fsc.user.email ?? '' }}"/>
+            </div>
+            <div class="col-sm-auto">
+                <button type="button" class="btn btn-outline-secondary email-preview-btn" id="email-preview-send">
+                    <span class="btn-label"><i class="fa-solid fa-paper-plane fa-fw"></i> {{ trans('send-test-email') }}</span>
+                    <span class="btn-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+                </button>
+            </div>
+            <div class="col-sm-auto d-flex align-items-center">
+                <i class="fa-solid fa-circle-info text-muted" id="email-preview-info" role="img"
+                   data-bs-toggle="tooltip" title="{{ trans('email-preview-help') }}"
+                   aria-label="{{ trans('email-preview-help') }}"></i>
+            </div>
+        </div>
+        <span id="email-preview-token">{{ formToken() }}</span>
+        <div class="mb-2">
+            <strong>{{ trans('subject') }}:</strong>
+            <span id="email-preview-subject"></span>
+        </div>
+        <iframe id="email-preview-frame" class="w-100 border rounded" style="height: 65vh" sandbox=""></iframe>
+    </div>
+</div>
+
+<script>
+    function emailPreviewFormData(action) {
+        const formData = new FormData();
+        formData.append('action', action);
+        formData.append('code', document.getElementById('email-preview-code').value);
+
+        // valores sin guardar del formulario de la notificación (si existen en la página)
+        const subjectInput = document.querySelector('input[name="subject"]');
+        if (subjectInput) {
+            formData.append('subject', subjectInput.value);
+        }
+        const bodyInput = document.querySelector('textarea[name="body"]');
+        if (bodyInput) {
+            formData.append('body', bodyInput.value);
+        }
+
+        // valores sin guardar del formulario de estilo (si existen en la página)
+        ['emailtitle', 'titlefont', 'titlesize', 'colortitle', 'hidetitle', 'logoposition', 'logoalign', 'logoembed',
+            'bodyfont', 'bodysize', 'bodycolor', 'colorbg', 'colorcontainer', 'colorbtn',
+            'footerfont', 'footercolor', 'footersize'].forEach(function (key) {
+            const input = document.querySelector('input[name="' + key + '"], select[name="' + key + '"]');
+            if (!input) {
+                return;
+            }
+            // los checkbox llevan value fijo: lo que importa es si están marcados
+            if (input.type === 'checkbox') {
+                formData.append('style_' + key, input.checked ? 'TRUE' : 'FALSE');
+            } else if (input.value) {
+                formData.append('style_' + key, input.value);
+            }
+        });
+        const footerInput = document.querySelector('textarea[name="footertext"]');
+        if (footerInput && footerInput.value) {
+            formData.append('style_footertext', footerInput.value);
+        }
+
+        return formData;
+    }
+
+    function emailPreviewRefresh() {
+        fetch(window.location.href, {
+            method: 'POST',
+            body: emailPreviewFormData('email-preview'),
+        }).then(function (response) {
+            if (response.ok) {
+                return response.json();
+            }
+            return Promise.reject(response);
+        }).then(function (data) {
+            if (data.ok) {
+                document.getElementById('email-preview-subject').textContent = data.subject;
+                document.getElementById('email-preview-frame').srcdoc = data.html;
+            } else {
+                document.getElementById('email-preview-subject').textContent = data.error || 'error';
+            }
+        }).catch(function (error) {
+            console.warn('email-preview error', error);
+        });
+    }
+
+    // muestra el resultado con el mismo estilo y posición que los mensajes nativos de
+    // FacturaScripts: una alerta descartable bajo la barra superior, replicando la
+    // estructura container-fluid > row > col-12 de Master/MenuTemplate. La insertamos
+    // al inicio del div.pt-3 hijo de body (la zona de mensajes de las plantillas master),
+    // al mismo nivel que las alertas nativas para que el ancho y los márgenes coincidan.
+    function emailPreviewAlert(text, style) {
+        const messagesZone = document.querySelector('body > div.pt-3');
+        const anchor = document.getElementById('messages-toasts');
+        if (!messagesZone && !anchor) {
+            // sin zona de mensajes (plantilla no estándar): usamos el toast del core
+            if (typeof setToast === 'function') {
+                setToast(text, style, '', 10000);
+            }
+            return;
+        }
+
+        // evitamos acumular alertas si se envían varias pruebas seguidas
+        document.querySelectorAll('.email-preview-alert-wrapper').forEach(function (old) {
+            old.remove();
+        });
+
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-dismissible alert-' + style;
+        alertDiv.setAttribute('role', 'alert');
+
+        const closeButton = document.createElement('button');
+        closeButton.type = 'button';
+        closeButton.className = 'btn-close';
+        closeButton.setAttribute('data-bs-dismiss', 'alert');
+        closeButton.setAttribute('aria-label', 'Close');
+        alertDiv.appendChild(closeButton);
+
+        const textDiv = document.createElement('div');
+        textDiv.textContent = text;
+        alertDiv.appendChild(textDiv);
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'container-fluid email-preview-alert-wrapper';
+        const row = document.createElement('div');
+        row.className = 'row';
+        const column = document.createElement('div');
+        column.className = 'col-12';
+        column.appendChild(alertDiv);
+        row.appendChild(column);
+        wrapper.appendChild(row);
+
+        if (messagesZone) {
+            messagesZone.insertAdjacentElement('afterbegin', wrapper);
+        } else {
+            anchor.insertAdjacentElement('afterend', wrapper);
+        }
+
+        // como tras guardar en FS, el mensaje queda arriba: subimos para que se vea
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+
+    function emailPreviewSend() {
+        const formData = emailPreviewFormData('email-preview-send');
+        formData.append('email', document.getElementById('email-preview-to').value);
+
+        const tokenInput = document.querySelector('#email-preview-token input[name="multireqtoken"]');
+        if (tokenInput) {
+            formData.append('multireqtoken', tokenInput.value);
+        }
+
+        // botón deshabilitado y puntos animados hasta recibir respuesta
+        const button = document.getElementById('email-preview-send');
+        button.disabled = true;
+        button.classList.add('loading');
+
+        const finish = function (text, ok) {
+            button.disabled = false;
+            button.classList.remove('loading');
+            emailPreviewAlert(text, ok ? 'success' : 'danger');
+        };
+
+        fetch(window.location.href, {
+            method: 'POST',
+            body: formData,
+        }).then(function (response) {
+            if (response.ok) {
+                return response.json();
+            }
+            return Promise.reject(response);
+        }).then(function (data) {
+            finish(data.ok ? data.message : (data.error || 'error'), data.ok);
+
+            // token nuevo para poder repetir el envío sin recargar la página
+            if (data.token && tokenInput) {
+                tokenInput.value = data.token;
+            }
+        }).catch(function (error) {
+            finish('error', false);
+            console.warn('email-preview-send error', error);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        emailPreviewRefresh();
+
+        const infoIcon = document.getElementById('email-preview-info');
+        if (infoIcon && window.bootstrap && bootstrap.Tooltip) {
+            new bootstrap.Tooltip(infoIcon);
+        }
+
+        document.getElementById('email-preview-refresh').addEventListener('click', emailPreviewRefresh);
+        document.getElementById('email-preview-send').addEventListener('click', emailPreviewSend);
+
+        const codeSelect = document.getElementById('email-preview-code');
+        if (codeSelect.tagName === 'SELECT') {
+            codeSelect.addEventListener('change', emailPreviewRefresh);
+        }
+
+        // al marcar "ocultar título" atenuamos sus campos de estilo. Sin disabled:
+        // los campos deshabilitados no se envían al guardar y borrarían lo guardado
+        const hideTitle = document.querySelector('input[name="hidetitle"]');
+        if (hideTitle) {
+            const toggleTitleFields = function () {
+                ['emailtitle', 'titlefont', 'titlesize', 'colortitle'].forEach(function (name) {
+                    const field = document.querySelector('input[name="' + name + '"], select[name="' + name + '"]');
+                    const column = field ? field.closest('[class*="col-"]') : null;
+                    if (column) {
+                        column.classList.add('email-preview-dimmable');
+                        column.classList.toggle('email-preview-dimmed', hideTitle.checked);
+                    }
+                });
+            };
+            toggleTitleFields();
+            hideTitle.addEventListener('change', toggleTitleFields);
+        }
+    });
+</script>

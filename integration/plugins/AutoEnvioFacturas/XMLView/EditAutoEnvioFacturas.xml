@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    AutoEnvioFacturas - Envía automáticamente por email las facturas emitidas (compatible con Verifactu). Nunca envía bocetos y, en ejercicios en modo Verifactu, solo envía facturas ya registradas en Verifactu.
+
+    Copyright (C) 2026 TI53, SLU - Antonio Martín Buitrago Laguna <antoniomartin@ti53.es>
+
+    This program is free software: you can redistribute it and/or modify it under
+    the terms of the GNU Lesser General Public License as published by the Free
+    Software Foundation, either version 3 of the License, or (at your option) any
+    later version. Distributed WITHOUT ANY WARRANTY. See the GNU Lesser General
+    Public License for more details: https://www.gnu.org/licenses/
+
+    @author    Antonio Martín Buitrago Laguna <antoniomartin@ti53.es>
+    @copyright 2026 TI53, SLU
+    @license   LGPL-3.0-or-later
+-->
+<view>
+    <columns>
+        <group name="autoenviofacturas" numcolumns="12">
+            <column name="enabled" display="left" numcolumns="2" order="100">
+                <widget type="checkbox" fieldname="enabled"/>
+            </column>
+            <column name="from-date" numcolumns="3" order="110">
+                <widget type="date" fieldname="fromdate"/>
+            </column>
+            <column name="max-emails-per-run" display="right" numcolumns="2" order="120">
+                <widget type="number" fieldname="maxemails" min="1" max="500"/>
+            </column>
+            <column name="delay-minutes" display="right" numcolumns="2" order="125">
+                <widget type="number" fieldname="delayminutes" min="0" max="1440"/>
+            </column>
+            <column name="include-rectified-invoices" display="left" numcolumns="2" order="130">
+                <widget type="checkbox" fieldname="rectificativas"/>
+            </column>
+        </group>
+        <group name="autoenviofacturas-email" title="autoenvio-email-text" icon="fa-solid fa-envelope-open-text"
+               description="autoenvio-email-text-desc" numcolumns="12">
+            <column name="bcc-email" numcolumns="4" order="140">
+                <widget type="text" fieldname="cco"/>
+            </column>
+        </group>
+    </columns>
+</view>
