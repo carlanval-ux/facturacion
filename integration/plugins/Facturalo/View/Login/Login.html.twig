@@ -29,73 +29,13 @@
                            required autocomplete="current-password"/>
                 </div>
                 <p class="mb-4">
-                    <a href="#" data-bs-toggle="modal" data-bs-target="#newPasswordModal">¿Has olvidado la contraseña?</a>
+                    <a href="{{ asset('RecuperarClave') }}">¿Has olvidado la contraseña?</a>
                 </p>
                 <button type="submit" class="btn btn-lg btn-primary w-100">Entrar</button>
             </form>
         </div>
     </main>
     <footer>Facturalo · RED TELECOM CONECTA, S.L.</footer>
-    <form action="{{ asset('login') }}" method="post" class="form">
-        {{ formToken() }}
-        <input type="hidden" name="action" value="change-password">
-        <div class="modal fade" id="newPasswordModal" tabindex="-1" role="dialog" aria-hidden="true">
-            <div class="modal-dialog" role="document">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <i class="fa-solid fa-user-lock me-2"></i> {{ trans('new-password') }}
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                        <i class="fa-solid fa-user fa-fw" aria-hidden="true"></i>
-                                </span>
-                                <input type="text" name="fsNewUserPasswd" class="form-control" maxlength="50"
-                                       placeholder="{{ trans('user') }}" required autocomplete="off"/>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                        <i class="fa-solid fa-key fa-fw" aria-hidden="true"></i>
-                                </span>
-                                <input type="password" name="fsNewPasswd" class="form-control" maxlength="50"
-                                       placeholder="{{ trans('new-password') }}" required autocomplete="off"/>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                        <i class="fa-solid fa-eye fa-fw" aria-hidden="true"></i>
-                                </span>
-                                <input type="password" name="fsNewPasswd2" class="form-control" maxlength="50"
-                                       placeholder="{{ trans('repeat-new-password') }}"
-                                       required autocomplete="off"/>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <p class="small text-muted">Para cambiarla aquí necesitas la clave técnica de la instalación. Si no la tienes, pide a RED TELECOM que te restablezca el acceso.</p>
-                            Clave técnica
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                        <i class="fa-solid fa-database fa-fw" aria-hidden="true"></i>
-                                </span>
-                                <input type="password" name="fsDbPasswd" class="form-control"
-                                       placeholder="{{ trans('db-password') }}" autocomplete="off"/>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="submit" class="btn btn-primary w-100">{{ trans('save') }}</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </form>
     </body>
 {% endblock %}
 
