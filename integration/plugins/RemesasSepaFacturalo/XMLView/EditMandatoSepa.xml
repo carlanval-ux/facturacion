@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <group name="data" numcolumns="12">
+            <column name="customer" numcolumns="4" order="100">
+                <widget type="autocomplete" fieldname="codcliente" required="true">
+                    <values source="clientes" fieldcode="codcliente" fieldtitle="nombre"/>
+                </widget>
+            </column>
+            <column name="sepa-mandate-reference" description="sepa-reference-help" numcolumns="4" order="110">
+                <widget type="text" fieldname="referencia" maxlength="35"/>
+            </column>
+            <column name="sepa-signature-date" numcolumns="2" order="120">
+                <widget type="date" fieldname="fechafirma" required="true"/>
+            </column>
+            <column name="status" numcolumns="2" order="130">
+                <widget type="select" fieldname="estado" translate="true" required="true">
+                    <values title="sepa-status-activo">activo</values>
+                    <values title="sepa-status-revocado">revocado</values>
+                </widget>
+            </column>
+        </group>
+        <group name="bank" numcolumns="12">
+            <column name="sepa-iban-masked" numcolumns="3" order="100">
+                <widget type="text" fieldname="ibanmask" readonly="true"/>
+            </column>
+            <column name="sepa-iban-full" level="99" numcolumns="3" order="105">
+                <widget type="text" fieldname="iban" maxlength="34"/>
+            </column>
+            <column name="sepa-iban-new" description="sepa-iban-new-help" numcolumns="3" order="110">
+                <widget type="text" fieldname="ibannuevo" maxlength="40"/>
+            </column>
+            <column name="sepa-bic" numcolumns="3" order="120">
+                <widget type="text" fieldname="bic" maxlength="11"/>
+            </column>
+            <column name="sepa-scheme" numcolumns="3" order="130">
+                <widget type="select" fieldname="tipo" required="true">
+                    <values title="CORE">CORE</values>
+                    <values title="B2B">B2B</values>
+                </widget>
+            </column>
+            <column name="sepa-sequence" numcolumns="3" order="140">
+                <widget type="select" fieldname="secuencia" required="true">
+                    <values title="FRST">FRST</values>
+                    <values title="RCUR">RCUR</values>
+                    <values title="FNAL">FNAL</values>
+                    <values title="OOFF">OOFF</values>
+                </widget>
+            </column>
+            <column name="observations" numcolumns="12" order="150">
+                <widget type="textarea" fieldname="observaciones"/>
+            </column>
+        </group>
+    </columns>
+</view>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <group name="data" numcolumns="12">
+            <column name="company" numcolumns="3" order="100">
+                <widget type="select" fieldname="idempresa" required="true">
+                    <values source="empresas" fieldcode="idempresa" fieldtitle="nombrecorto"/>
+                </widget>
+            </column>
+            <column name="sepa-name" description="sepa-creditor-name-help" numcolumns="5" order="110">
+                <widget type="text" fieldname="nombre" maxlength="70" required="true"/>
+            </column>
+            <column name="sepa-creditor-id" description="sepa-creditor-id-help" numcolumns="4" order="120">
+                <widget type="text" fieldname="aci" maxlength="35" required="true"/>
+            </column>
+        </group>
+        <group name="bank" numcolumns="12">
+            <column name="sepa-iban-masked" numcolumns="3" order="100">
+                <widget type="text" fieldname="ibanmask" readonly="true"/>
+            </column>
+            <column name="sepa-iban-full" level="99" numcolumns="3" order="105">
+                <widget type="text" fieldname="iban" maxlength="34"/>
+            </column>
+            <column name="sepa-iban-new" description="sepa-iban-new-help" numcolumns="3" order="110">
+                <widget type="text" fieldname="ibannuevo" maxlength="40"/>
+            </column>
+            <column name="sepa-bic" numcolumns="3" order="120">
+                <widget type="text" fieldname="bic" maxlength="11"/>
+            </column>
+        </group>
+        <group name="lead-times" title="sepa-lead-times" description="sepa-lead-times-help" numcolumns="12">
+            <column name="sepa-lead-frst" numcolumns="4" order="100">
+                <widget type="number" fieldname="plazofrst" decimal="0" min="0" max="15"/>
+            </column>
+            <column name="sepa-lead-rcur" numcolumns="4" order="110">
+                <widget type="number" fieldname="plazorcur" decimal="0" min="0" max="15"/>
+            </column>
+            <column name="sepa-lead-b2b" numcolumns="4" order="120">
+                <widget type="number" fieldname="plazob2b" decimal="0" min="0" max="15"/>
+            </column>
+        </group>
+    </columns>
+</view>
