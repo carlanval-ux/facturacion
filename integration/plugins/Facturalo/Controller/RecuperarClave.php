@@ -12,6 +12,7 @@ use FacturaScripts\Core\Request;
 use FacturaScripts\Core\Session;
 use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
+use FacturaScripts\Dinamic\Model\EmailSent;
 use FacturaScripts\Dinamic\Model\User;
 use FacturaScripts\Plugins\Facturalo\Model\FacturaloResetToken;
 
@@ -157,10 +158,19 @@ class RecuperarClave implements ControllerInterface
                 . 'Pulsa el botón para elegir una nueva. El enlace es de un solo uso y caduca en 1 hora.'))
             ->addMainBlock(new ButtonBlock('Elegir nueva contraseña', $base . '/RecuperarClave?t=' . $token))
             ->addMainBlock(new TextBlock('Si no lo has solicitado tú, ignora este correo: tu contraseña no cambiará.'));
-        if (false === $mail->send()) {
+        try {
+            $sent = $mail->send();
+        } catch (\Throwable $e) {
+            $sent = false;
+        }
+        if (false === $sent) {
             $row->delete();
             Tools::log()->error('Recuperar clave: fallo al enviar el correo');
             return;
+        }
+        // el registro de correos enviados guarda el HTML con el enlace: borramos el token en claro
+        foreach (EmailSent::all([Where::like('html', '%' . $token . '%')]) as $registro) {
+            $registro->delete();
         }
         Tools::log('audit')->notice('Recuperar clave: enlace enviado', ['nick' => $user->nick, 'ip' => Session::getClientIp()]);
     }
