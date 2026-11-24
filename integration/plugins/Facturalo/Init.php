@@ -5,6 +5,7 @@ use FacturaScripts\Core\Lib\AssetManager;
 use FacturaScripts\Core\Template\InitClass;
 use FacturaScripts\Core\Tools;
 use FacturaScripts\Plugins\Facturalo\Lib\Defaults;
+use FacturaScripts\Plugins\Facturalo\Lib\LoginEmail;
 
 final class Init extends InitClass
 {
