@@ -16,10 +16,20 @@ final class Init extends InitClass
             @mkdir($dir, 0775, true);
         }
         $this->cerrarPanel();
+        $this->loginConEmail();
         $this->aplicarDefectos();
         // identidad visual (se carga tras el CSS del nucleo)
         AssetManager::addCss(Tools::config('route') . '/Dinamic/Assets/CSS/facturalo.css', 10);
         AssetManager::addJs(Tools::config('route') . '/Dinamic/Assets/JS/facturalo.js', 10);
+    }
+
+    private function loginConEmail(): void
+    {
+        try {
+            LoginEmail::apply();
+        } catch (Throwable $e) {
+            // sin base de datos: el login funciona solo con usuario
+        }
     }
 
     private function aplicarDefectos(): void

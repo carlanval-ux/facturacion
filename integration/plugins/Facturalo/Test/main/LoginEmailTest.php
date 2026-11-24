@@ -21,16 +21,16 @@ final class LoginEmailTest extends TestCase
     public function testEmailResuelveElNickSinDistinguirMayusculas(): void
     {
         $u = $this->crear('lg-uno', 'lg-uno@example.com');
-        $this->assertSame('lg-uno', Login::resolveNick('LG-Uno@Example.COM'));
-        $this->assertNull(Login::resolveNick('lg-uno'));
+        $this->assertSame('lg-uno', LoginEmail::resolveNick('LG-Uno@Example.COM'));
+        $this->assertNull(LoginEmail::resolveNick('lg-uno'));
         $u->delete();
     }
 
     public function testEmailInexistenteODeshabilitadoNoResuelve(): void
     {
         $u = $this->crear('lg-off', 'lg-off@example.com', false);
-        $this->assertNull(Login::resolveNick('nadie@example.com'));
-        $this->assertNull(Login::resolveNick('lg-off@example.com'));
+        $this->assertNull(LoginEmail::resolveNick('nadie@example.com'));
+        $this->assertNull(LoginEmail::resolveNick('lg-off@example.com'));
         $u->delete();
     }
 
@@ -38,7 +38,7 @@ final class LoginEmailTest extends TestCase
     {
         $a = $this->crear('lg-a', 'lg-dup@example.com');
         $b = $this->crear('lg-b', 'lg-dup@example.com');
-        $this->assertNull(Login::resolveNick('lg-dup@example.com'));
+        $this->assertNull(LoginEmail::resolveNick('lg-dup@example.com'));
         $a->delete();
         $b->delete();
     }
