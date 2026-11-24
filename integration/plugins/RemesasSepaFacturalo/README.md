@@ -23,7 +23,7 @@ El IBAN se muestra enmascarado (`ES91 **** **** **** **** 1332`); el IBAN comple
 
 ## Tests
 - `Test/main/RemesasSepaTest.php` (PHPUnit): IBAN válidos/inválidos, máscara, días hábiles (Semana Santa), texto SEPA, ACI, generación y agrupación del XML con ejemplos, plazos, rechazos.
-- `Test/sepa-live.sh`: prueba en vivo en teleco-test (modelos, PDF, remesa→cobro→reversión con `IDRECIBO=`).
+- `Test/sepa-live.sh`: prueba en vivo por API REST y web (sin CLI PHP); ver cabecera del script.
 
 ## Límites conocidos
 - Solo EUR y un acreedor por empresa; remesas de una sola empresa.

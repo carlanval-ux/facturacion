@@ -19,7 +19,6 @@
     <column>
         <name>estado</name>
         <type>character varying(12)</type>
-        <default>generada</default>
     </column>
     <column>
         <name>numrecibos</name>

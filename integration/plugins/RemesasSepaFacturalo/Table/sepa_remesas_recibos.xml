@@ -36,7 +36,6 @@
     <column>
         <name>estado</name>
         <type>character varying(10)</type>
-        <default>remesado</default>
     </column>
     <column>
         <name>motivo</name>
