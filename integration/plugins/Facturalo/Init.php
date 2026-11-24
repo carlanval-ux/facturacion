@@ -23,6 +23,8 @@ final class Init extends InitClass
         $this->loginConEmail();
         $this->personalDePlataforma();
         $this->aplicarDefectos();
+        // protección de fecha: no se emiten facturas de cliente con fecha futura
+        $this->loadExtension(new Extension\Model\FacturaCliente());
         // identidad visual (se carga tras el CSS del nucleo)
         AssetManager::addCss(Tools::config('route') . '/Dinamic/Assets/CSS/facturalo.css', 10);
         AssetManager::addJs(Tools::config('route') . '/Dinamic/Assets/JS/facturalo.js', 10);

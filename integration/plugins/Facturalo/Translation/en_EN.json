@@ -20,5 +20,6 @@
   "running-plugin-cron": "Running Facturalo cron for plugin %pluginName%",
   "starting-cron": "Starting Facturalo cron execution...",
   "telemetry-data-to-send": "Registered installations periodically notify the version of Facturalo, PHP, country, language and list of plugins.",
-  "updates-available-p": "There are updates available for Facturalo. Please click on the updater and download the new version. Updates fix bugs and add new features."
+  "updates-available-p": "There are updates available for Facturalo. Please click on the updater and download the new version. Updates fix bugs and add new features.",
+  "fecha-factura-futura": "An invoice cannot be issued with a date later than today (%fecha%). Fix the date so the invoice numbering and sequence are not altered."
 }
