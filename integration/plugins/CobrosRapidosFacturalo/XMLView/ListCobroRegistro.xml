@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="date" order="100">
+            <widget type="datetime" fieldname="fecha"/>
+        </column>
+        <column name="cobros-action" order="110">
+            <widget type="text" fieldname="accion"/>
+        </column>
+        <column name="invoice" order="120">
+            <widget type="text" fieldname="codigofactura"/>
+        </column>
+        <column name="customer" order="130">
+            <widget type="text" fieldname="codcliente"/>
+        </column>
+        <column name="amount" display="right" order="140">
+            <widget type="money" fieldname="importe"/>
+        </column>
+        <column name="payment-date" order="150">
+            <widget type="date" fieldname="fechacobro"/>
+        </column>
+        <column name="payment-method" order="160">
+            <widget type="text" fieldname="codpago"/>
+        </column>
+        <column name="user" order="170">
+            <widget type="text" fieldname="nick"/>
+        </column>
+        <column name="cobros-reason" order="180">
+            <widget type="text" fieldname="motivo"/>
+        </column>
+    </columns>
+    <rows>
+        <row type="status">
+            <option color="success" fieldname="accion">cobro</option>
+            <option color="danger" fieldname="accion">anulacion</option>
+        </row>
+    </rows>
+    <modals>
+        <group name="cobros-cancel" title="cobros-cancel" icon="fa-solid fa-rotate-left">
+            <column name="cobros-reason" description="cobros-reason-desc" numcolumns="12">
+                <widget type="textarea" fieldname="motivo" required="true"/>
+            </column>
+        </group>
+    </modals>
+</view>
