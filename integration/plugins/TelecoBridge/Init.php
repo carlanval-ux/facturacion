@@ -11,6 +11,11 @@ class Init extends InitClass
     {
         ApiRoot::addCustomResource('telecoFacturaCliente');
         Kernel::addRoute('/api/3/telecoFacturaCliente', '\FacturaScripts\Dinamic\Controller\ApiTelecoFacturaCliente');
+        // MAPA-23: rectificar y cobrar con Idempotency-Key
+        ApiRoot::addCustomResource('telecoRectificativaCliente');
+        Kernel::addRoute('/api/3/telecoRectificativaCliente', '\FacturaScripts\Dinamic\Controller\ApiTelecoRectificativaCliente');
+        ApiRoot::addCustomResource('telecoPagarFacturaCliente');
+        Kernel::addRoute('/api/3/telecoPagarFacturaCliente/*', '\FacturaScripts\Dinamic\Controller\ApiTelecoPagarFacturaCliente');
     }
 
     public function uninstall(): void

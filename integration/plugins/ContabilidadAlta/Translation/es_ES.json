@@ -1,0 +1,4 @@
+{
+  "codigo-alfanumerico": "El código «%value%» no es válido: solo letras y números, hasta 10 caracteres.",
+  "fecha-periodo-cerrado": "La fecha %fecha% pertenece a un periodo cerrado por la gestoría; no se pueden crear ni cambiar facturas con esa fecha."
+}
