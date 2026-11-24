@@ -19,7 +19,7 @@ Complementos: `docs/FACTURALO-DEUDA-PLUGINS.md` (funciones propias a construir),
 7. **Core de FS no guarda nada de VERI\*FACTU** (sin huella, QR persistido ni estado AEAT): todo eso lo aporta el plugin oficial; Clarto solo podrá **mostrar el estado** que ese plugin exponga (§9: script de lectura pendiente).
 8. **Huecos críticos de Clarto** (mayor a menor): G1 catálogo de plan contable · G2 ingesta máquina-a-máquina (`extracciones.documento_id` es NOT NULL y exige revisión humana) · G3 vínculo de identidad empresa↔instancia (`sso_externo_id` no existe) · G4 emitidas con rectificativa/país/vencimiento/cobros (`fact_facturas` no los tiene) · G5 IGIC/IPSI/exenciones/operación · G6 pestañas de ficha (no hay pestaña de facturación).
 9. **Huecos críticos de Facturalo**: F1 `facturascli` sin marca de última modificación (no hay forma barata de detectar cambios de cobro/estado: hace falta `last_update` o outbox en el plugin propio) · F2 secuencias con `usarhuecos=true` · F3 sin bloqueo por trimestre · F4 sin idempotencia nativa (la tiene `TelecoBridge` solo para crear) · F5 sin pestañas/informes visibles en menú `Informes`.
-10. **Plan de trabajo propuesto**: 28 tickets (§7), ≈ 62 días-persona (±40 %), repartidos Clarto 36 d / Facturalo 17 d / ambos 9 d. Ruta mínima para «ver las facturas de Facturalo en la ficha de Clarto» (T-01..T-08, T-14) ≈ 20 días.
+10. **Plan de trabajo propuesto**: 28 tickets (§7), ≈ 78 días-persona (±40 %), repartidos Clarto ≈ 52 d / Facturalo ≈ 15 d / ambos ≈ 11 d. Ruta mínima para «ver las facturas de Facturalo en la ficha de Clarto» (MAPA-01, 02, 03, 04, 07, 08, 10, 19) ≈ 30 días.
 
 ---
 
