@@ -1,0 +1,205 @@
+{#
+    PersonalizarEmail: copia de Core/View/Email/NewTemplate.html.twig donde los
+    colores y el pie se leen del grupo de ajustes "emailstyle". Los valores por
+    defecto son los mismos del core, así que sin configuración el email es idéntico.
+#}
+{% set colorTitle = settings('emailstyle', 'colortitle', '#3D67AC') ?: '#3D67AC' %}
+{% set colorTitle = colorTitle matches '/^[0-9a-fA-F]{3,8}$/' ? '#' ~ colorTitle : colorTitle %}
+{% set colorBg = settings('emailstyle', 'colorbg', '#f6f9fc') ?: '#f6f9fc' %}
+{% set colorBg = colorBg matches '/^[0-9a-fA-F]{3,8}$/' ? '#' ~ colorBg : colorBg %}
+{% set colorContainer = settings('emailstyle', 'colorcontainer', '#FFFFFF') ?: '#FFFFFF' %}
+{% set colorContainer = colorContainer matches '/^[0-9a-fA-F]{3,8}$/' ? '#' ~ colorContainer : colorContainer %}
+{% set colorBtn = settings('emailstyle', 'colorbtn', '#2E7EFA') ?: '#2E7EFA' %}
+{% set colorBtn = colorBtn matches '/^[0-9a-fA-F]{3,8}$/' ? '#' ~ colorBtn : colorBtn %}
+{% set footerText = settings('emailstyle', 'footertext', '') %}
+{% set emailTitle = settings('emailstyle', 'emailtitle', '') ?: company.nombrecorto %}
+{% set titleFont = settings('emailstyle', 'titlefont', '') %}
+{% set titleSize = settings('emailstyle', 'titlesize', '') ~ '' %}
+{% set titleSize = titleSize matches '/^\\d+$/' ? titleSize ~ 'px' : '2em' %}
+{% set bodyFont = settings('emailstyle', 'bodyfont', '') %}
+{% set bodyColor = settings('emailstyle', 'bodycolor', '') ?: 'black' %}
+{% set bodyColor = bodyColor matches '/^[0-9a-fA-F]{3,8}$/' ? '#' ~ bodyColor : bodyColor %}
+{% set bodySize = settings('emailstyle', 'bodysize', '') ~ '' %}
+{% set bodySize = bodySize matches '/^\\d+$/' ? bodySize ~ 'px' : '1em' %}
+{% set footerFont = settings('emailstyle', 'footerfont', '') %}
+{% set footerColor = settings('emailstyle', 'footercolor', '') ?: 'black' %}
+{% set footerColor = footerColor matches '/^[0-9a-fA-F]{3,8}$/' ? '#' ~ footerColor : footerColor %}
+{% set footerSize = settings('emailstyle', 'footersize', '') ~ '' %}
+{% set footerSize = footerSize matches '/^\\d+$/' ? footerSize ~ 'px' : '10px' %}
+{% set logoPosition = settings('emailstyle', 'logoposition', 'top') ?: 'top' %}
+{% set showLogo = logoUrl and logoPosition != 'hidden' %}
+{% set logoAlign = settings('emailstyle', 'logoalign', 'center') ?: 'center' %}
+{% set logoAlign = logoAlign in ['left', 'center', 'right'] ? logoAlign : 'center' %}
+{# o valor puede llegar como bool (guardado) o como 'TRUE'/'FALSE' (override de la vista previa) #}
+{% set hideTitle = settings('emailstyle', 'hidetitle', false) %}
+{% set showTitle = not (hideTitle is same as(true) or hideTitle == 'TRUE' or hideTitle == '1') %}
+{% set logoImg %}
+    {% if company.web is empty %}
+        <img class="email-logo" src="{{ logoUrl }}" alt="{{ emailTitle }}" style="max-height:120px; height:auto; width:auto"/>
+    {% else %}
+        <a href="{{ company.web }}" style="text-decoration:none">
+            <img class="email-logo" src="{{ logoUrl }}" alt="{{ emailTitle }}" style="max-height:120px; height:auto; width:auto"/>
+        </a>
+    {% endif %}
+{% endset %}
+{% set logoRow %}
+    <tr>
+        <td>&nbsp;&nbsp;&nbsp;</td>
+        <td style="padding:10px; text-align:{{ logoAlign }}">
+            {{ logoImg }}
+        </td>
+        <td>&nbsp;&nbsp;&nbsp;</td>
+    </tr>
+{% endset %}
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>{{ title }}</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style type="text/css">
+            {% block css %}
+                #body {
+                    background-color: {{ colorBg }};
+                    color: black;
+                }
+                .container {
+                    background-color: {{ colorContainer }};
+                    border-radius: 5px;
+                    color: {{ bodyColor }};
+                    font-size: {{ bodySize }};
+                    padding: 10px;
+                    {% if bodyFont %}font-family: {{ bodyFont }};{% endif %}
+                }
+                .w-100 {
+                    width: 100%;
+                }
+                .mb-15 {
+                    margin-bottom: 15px;
+                }
+                .block {
+                    border: 3px solid #e3e9ef;
+                    border-radius: 5px;
+                    color: black;
+                    font-size: 1em;
+                    padding: 10px;
+                }
+                .company {
+                    color: {{ colorTitle }};
+                    font-size: {{ titleSize }};
+                    font-weight: bold;
+                    {% if titleFont %}font-family: {{ titleFont }};{% endif %}
+                }
+                .email-logo {
+                    max-height: 120px;
+                    height: auto;
+                    width: auto;
+                }
+                .footer {
+                    font-size: {{ footerSize }};
+                    color: {{ footerColor }};
+                    padding: 10px;
+                    {% if footerFont %}font-family: {{ footerFont }};{% endif %}
+                }
+                .btn {
+                    border-radius: 5px;
+                    background-color: {{ colorBtn }};
+                    color: #FFFFFF;
+                }
+                .btn a {
+                    padding: 10px;
+                    font-family: Helvetica, Arial, sans-serif;
+                    font-size: 14px;
+                    border-radius: 5px;
+                    background-color: {{ colorBtn }};
+                    color: #FFFFFF;
+                    text-decoration: none;
+                    font-weight: bold;
+                    display: inline-block;
+                }
+                .company a {
+                    color: {{ colorTitle }};
+                    text-decoration: none;
+                }
+                .text-center {
+                    text-align: center;
+                }
+                .table {
+                    border: 1px solid #e3e9ef;
+                    border-collapse: collapse;
+                }
+                .table th {
+                    font-weight: bold;
+                    background-color: #e3e9ef;
+                }
+                .table th, .table td {
+                    text-align: left;
+                    padding: 5px;
+                }
+                .table td {
+                    border-top: 1px solid #e3e9ef;
+                }
+            {% endblock %}
+        </style>
+        {% block javascripts %}
+        {% endblock %}
+    </head>
+    <body>
+        <div id="body">
+            {% block body %}
+                <table style="width:100%; background-color:{{ colorBg }}; color:black" >
+                    {% if showLogo and logoPosition == 'top' %}
+                        {{ logoRow }}
+                    {% endif %}
+                    {% if showTitle %}
+                        <tr>
+                            <td>&nbsp;&nbsp;&nbsp;</td>
+                            <td style="padding:10px">
+                                <h3 class="company" style="text-align:center; color:{{ colorTitle }}; font-size:{{ titleSize }}; font-weight:bold{% if titleFont %}; font-family:{{ titleFont }}{% endif %}">
+                                    {% if company.web is empty %}
+                                        {{ emailTitle }}
+                                    {% else %}
+                                        <a href="{{ company.web }}" style="text-decoration:none">
+                                            {{ emailTitle }}
+                                        </a>
+                                    {% endif %}
+                                </h3>
+                            </td>
+                            <td>&nbsp;&nbsp;&nbsp;</td>
+                        </tr>
+                    {% endif %}
+                    {% if showLogo and logoPosition == 'aftertitle' %}
+                        {{ logoRow }}
+                    {% endif %}
+                    <tr>
+                        <td>&nbsp;&nbsp;&nbsp;</td>
+                        <td class="container" style="background-color: {{ colorContainer }}; border-radius: 5px; color: {{ bodyColor }}; font-size: {{ bodySize }}; padding:10px{% if bodyFont %}; font-family:{{ bodyFont }}{% endif %}">
+                            {% for block in mainBlocks %}
+                                {{ block.render() | raw }}
+                            {% endfor %}
+                        </td>
+                        <td>&nbsp;&nbsp;&nbsp;</td>
+                    </tr>
+                    {% if showLogo and logoPosition == 'body' %}
+                        {{ logoRow }}
+                    {% endif %}
+                    <tr>
+                        <td>&nbsp;&nbsp;&nbsp;</td>
+                        <td class="footer" style="font-size:{{ footerSize }}; color:{{ footerColor }}; padding:10px{% if footerFont %}; font-family:{{ footerFont }}{% endif %}">
+                            {% for block in footerBlocks %}
+                                {{ block.render(true) | raw }}
+                            {% endfor %}
+                            {% if footerText %}
+                                <p style="font-size:{{ footerSize }}; color:{{ footerColor }}{% if footerFont %}; font-family:{{ footerFont }}{% endif %}">{{ footerText | nl2br }}</p>
+                            {% endif %}
+                        </td>
+                        <td>&nbsp;&nbsp;&nbsp;</td>
+                    </tr>
+                    {% if showLogo and logoPosition == 'footer' %}
+                        {{ logoRow }}
+                    {% endif %}
+                </table>
+            {% endblock %}
+        </div>
+    </body>
+</html>

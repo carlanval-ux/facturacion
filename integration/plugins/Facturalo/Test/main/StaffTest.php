@@ -26,6 +26,7 @@ final class StaffTest extends TestCase
     {
         $this->assertTrue(Staff::mustBlock('/api/3/plugins', []));
         $this->assertTrue(Staff::mustBlock('/api/3/plugins/Foo', ['Token' => 'no-existe']));
+        $this->assertTrue(Staff::mustBlock('/api/3/visorerrores/errores', ['Token' => 'no-existe']));
         $this->assertFalse(Staff::mustBlock('/api/3/clientes', []));
     }
 

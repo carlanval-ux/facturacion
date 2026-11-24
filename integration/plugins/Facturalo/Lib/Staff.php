@@ -21,6 +21,8 @@ final class Staff
     const BLOCKED = [
         'adminplugins', 'updater', 'about', 'configemail', 'editapikey',
         'listlogmessage', 'editlogmessage', 'editcronjob',
+        // plugins de plataforma (VisorErrores, MisInstalaciones)
+        'visorerrores', 'listinstalacion', 'editinstalacion',
     ];
 
     /** Controladores que también usan procesos sin sesión (cron, despliegue): solo se bloquean a una sesión de cliente. */
@@ -73,9 +75,9 @@ final class Staff
         $segments = explode('/', trim($path, '/'));
         $name = strtolower($segments[0] ?? '');
 
-        // API de plugins: solo la clave de la instalación o una clave de un usuario staff
+        // API de plugins (y del visor de errores): solo la clave de la instalación o una clave de un usuario staff
         if ('api' === $name) {
-            if (1 !== preg_match('#^api/\d+/plugins(/|$)#i', trim($path, '/'))) {
+            if (1 !== preg_match('#^api/\d+/(plugins|visorerrores)(/|$)#i', trim($path, '/'))) {
                 return false;
             }
             $token = (string)($headers['Token'] ?? $headers['X-Auth-Token'] ?? '');

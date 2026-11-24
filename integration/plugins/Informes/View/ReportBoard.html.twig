@@ -1,0 +1,18 @@
+<script src="{{ asset('Plugins/Informes/node_modules/apexcharts/dist/apexcharts.min.js') }}"></script>
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+
+{% set lines = fsc.getLines() %}
+{% if lines is empty %}
+    <div class="alert alert-dismissible alert-info">{{ trans('empty-report-board') }}</div>
+{% else %}
+    <div class="card shadow">
+        <div class="row">
+            {% for line in lines %}
+                {% set report = line.getReport() %}
+                <div class="col-md-{{ line.columns }} my-2" style="height: {{ line.height }}px">
+                    {{ report.getChart().render({'height':line.height}) | raw }}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}

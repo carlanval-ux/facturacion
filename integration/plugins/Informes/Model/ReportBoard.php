@@ -1,0 +1,107 @@
+<?php
+/**
+ * This file is part of Informes plugin for FacturaScripts
+ * Copyright (C) 2022-2026 Carlos García Gómez <carlos@facturascripts.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+namespace FacturaScripts\Plugins\Informes\Model;
+
+use FacturaScripts\Core\Template\ModelClass;
+use FacturaScripts\Core\Template\ModelTrait;
+use FacturaScripts\Core\Tools;
+use FacturaScripts\Core\Where;
+
+/**
+ * Modelo de un tablero que agrupa varios informes
+ *
+ * @author Daniel Fernández Giménez <contacto@danielfg.es>
+ */
+class ReportBoard extends ModelClass
+{
+    use ModelTrait;
+
+    /** @var string fecha y hora de creación */
+    public $creationdate;
+
+    /** @var bool si el tablero aparece destacado */
+    public $featured;
+
+    /** @var int clave primaria */
+    public $id;
+
+    /** @var string nombre del tablero */
+    public $name;
+
+    /** @var string etiqueta usada para agrupar tableros */
+    public $tag;
+
+    public function addLine(Report $report, int $pos = 1): bool
+    {
+        // comprobamos si ya existe la linea
+        $line = new ReportBoardLine();
+        $where = [
+            Where::eq('idreportboard', $this->id),
+            Where::eq('idreport', $report->id),
+        ];
+        if ($line->loadWhere($where)) {
+            return false;
+        }
+
+        // la añadimos
+        $line->idreport = $report->id;
+        $line->idreportboard = $this->id;
+        $line->sort = $pos;
+        return $line->save();
+    }
+
+    public function clear(): void
+    {
+        parent::clear();
+        $this->creationdate = Tools::dateTime();
+        $this->featured = false;
+    }
+
+    public function getLines(): array
+    {
+        $where = [Where::eq('idreportboard', $this->id)];
+        $orderBy = ['sort' => 'ASC'];
+        return ReportBoardLine::all($where, $orderBy, 0, 0);
+    }
+
+    public function primaryDescriptionColumn(): string
+    {
+        return 'name';
+    }
+
+    public static function tableName(): string
+    {
+        return 'reports_boards';
+    }
+
+    public function test(): bool
+    {
+        // escapamos el html
+        $this->name = Tools::noHtml($this->name);
+        $this->tag = Tools::noHtml($this->tag);
+
+        return parent::test();
+    }
+
+    public function url(string $type = 'auto', string $list = 'ListReport?activetab=List'): string
+    {
+        return parent::url($type, $list);
+    }
+}

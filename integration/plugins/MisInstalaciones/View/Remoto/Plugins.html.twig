@@ -1,0 +1,48 @@
+{% set activos = plugins|filter(p => p.enabled) %}
+{% set inactivos = plugins|filter(p => not p.enabled) %}
+
+{% for grupo in [
+    {plugins: activos, titulo: 'enabled-plugins', clase: 'success', icono: 'fa-solid fa-circle-check', accion: 'disable', estado: 'active'},
+    {plugins: inactivos, titulo: 'disabled-plugins', clase: 'secondary', icono: 'fa-regular fa-circle', accion: 'enable', estado: 'inactive'}
+] %}
+    <div class="table-responsive{{ loop.first ? '' : ' mt-4' }}">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+            <tr class="table-{{ grupo.clase }}">
+                <td colspan="3" class="fw-bold text-uppercase small">
+                    <i class="{{ grupo.icono }} fa-fw" aria-hidden="true"></i>
+                    {{ trans(grupo.titulo) }} <span class="badge bg-{{ grupo.clase }}">{{ grupo.plugins|length }}</span>
+                </td>
+            </tr>
+            <tr>
+                <th class="text-center" style="width: 12%;">{{ trans('status') }}</th>
+                <th style="width: 48%;">{{ trans('name') }}</th>
+                <th style="width: 40%;">{{ trans('description') }}</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for p in grupo.plugins %}
+                <tr{{ p.enabled ? ' class="bg-success bg-opacity-25"' : '' }}>
+                    <td class="text-center text-nowrap">
+                        <div class="form-check form-switch d-inline-flex m-0 align-items-center" title="{{ trans(grupo.accion) }}">
+                            <input class="form-check-input me-0" type="checkbox" role="switch" autocomplete="off" style="cursor: pointer;"
+                                   {{ p.enabled ? 'checked' : '' }} data-accion="plugin-toggle" data-plugin="{{ p.name }}"
+                                   data-modo="{{ grupo.accion }}">
+                        </div>
+                        <div><span class="badge bg-{{ grupo.clase }}">{{ trans(grupo.estado) }}</span></div>
+                    </td>
+                    <td>
+                        <div class="fw-semibold text-break">{{ p.name }}</div>
+                        <small class="text-muted">{{ p.version ? 'v' ~ p.version : '---' }}</small>
+                    </td>
+                    <td class="text-body-secondary small">{{ p.description ?: '---' }}</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="3"><b>{{ trans('no-data') }}</b></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endfor %}

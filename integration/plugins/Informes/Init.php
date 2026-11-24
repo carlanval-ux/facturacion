@@ -1,0 +1,279 @@
+<?php
+/**
+ * This file is part of Informes plugin for FacturaScripts
+ * Copyright (C) 2022-2026 Carlos García Gómez <carlos@facturascripts.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+namespace FacturaScripts\Plugins\Informes;
+
+use FacturaScripts\Core\Base\DataBase;
+use FacturaScripts\Core\Migrations;
+use FacturaScripts\Core\Template\InitClass;
+use FacturaScripts\Core\Tools;
+use FacturaScripts\Core\Where;
+use FacturaScripts\Core\Model\Role;
+use FacturaScripts\Core\Model\RoleAccess;
+use FacturaScripts\Dinamic\Model\BalanceAccount;
+use FacturaScripts\Dinamic\Model\BalanceCode;
+use FacturaScripts\Dinamic\Model\Ejercicio;
+use ParseCsv\Csv;
+
+final class Init extends InitClass
+{
+    const ROLE_NAME = 'Informes';
+
+    public function init(): void
+    {
+        $this->loadExtension(new Extension\Controller\EditAgente());
+        $this->loadExtension(new Extension\Controller\EditCliente());
+        $this->loadExtension(new Extension\Controller\EditCuenta());
+        $this->loadExtension(new Extension\Controller\EditProveedor());
+        $this->loadExtension(new Extension\Controller\EditUser());
+        $this->loadExtension(new Extension\Controller\Dashboard());
+        $this->loadExtension(new Extension\Model\Ejercicio());
+    }
+
+    public function uninstall(): void
+    {
+    }
+
+    public function update(): void
+    {
+        // inicializamos el modelo para que aplique los cambios en la tabla
+        new Ejercicio();
+
+        // migramos los datos antiguos
+        $this->migrateOldBalances();
+        $this->migrateOldReports();
+
+        // rellenamos la restricción en las cuentas de doble saldo de instalaciones existentes
+        Migrations::runPluginMigration(new Migration\BalanceAccountRestriction());
+
+        // crea el role y permisos del plugin
+        $this->createRoleForPlugin();
+    }
+
+    private function copyBalancePymes(): bool
+    {
+        // abrimos el csv balance_pymes.csv
+        $csv = new Csv();
+        $csv->auto(FS_FOLDER . '/Plugins/Informes/Data/Other/balance_pymes.csv');
+        if (empty($csv->data)) {
+            return false;
+        }
+
+        foreach ($csv->data as $row) {
+            $balanceCode = new BalanceCode();
+            $balanceCode->codbalance = $row['codbalance'];
+            $balanceCode->description1 = $row['description1'];
+            $balanceCode->description2 = $row['description2'];
+            $balanceCode->description3 = $row['description3'];
+            $balanceCode->description4 = $row['description4'];
+            $balanceCode->level1 = $row['level1'];
+            $balanceCode->level2 = $row['level2'];
+            $balanceCode->level3 = $row['level3'];
+            $balanceCode->level4 = $row['level4'];
+            $balanceCode->nature = $row['nature'];
+            $balanceCode->subtype = 'pymes';
+            if (false === $balanceCode->save()) {
+                return false;
+            }
+
+            // copiamos las cuentas
+            $accounts = explode(',', $row['accounts']);
+            foreach ($accounts as $account) {
+                $balanceAccount = new BalanceAccount();
+                $balanceAccount->idbalance = $balanceCode->id;
+                $balanceAccount->codcuenta = trim($account);
+                if (false === $balanceAccount->save()) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private function createRoleForPlugin(): void
+    {
+        // force table checks for Role and RoleAccess
+        new Role();
+        new RoleAccess();
+
+        $dataBase = new DataBase();
+        $dataBase->beginTransaction();
+
+        // creates the role if not exists
+        $role = new Role();
+        if (false === $role->load(self::ROLE_NAME)) {
+            $role->codrole = $role->descripcion = self::ROLE_NAME;
+            if (false === $role->save()) {
+                // rollback and exit on fail
+                $dataBase->rollback();
+                return;
+            }
+        }
+
+        // checks the role permissions
+        $nameControllers = [
+            'ReportTreasury','ReportTransport','ReportTaxes','ReportResult',
+            'ReportProducto','ReportCustomers','ReportSuppliers','ReportContacts','ReportBreakdown','ReportBooks',
+            'ListReportAccounting','ListReport',
+            'EditReportLedger','EditReportBoard','EditReportBalance','EditReportAmount','EditReport','EditBalanceCode'
+        ];
+        foreach ($nameControllers as $nameController) {
+            $roleAccess = new RoleAccess();
+            $where = [
+                Where::eq('codrole', self::ROLE_NAME),
+                Where::eq('pagename', $nameController)
+            ];
+            if ($roleAccess->loadWhere($where)) {
+                // permission exists? Then skip
+                continue;
+            }
+
+            // creates the permission if not exists
+            $roleAccess->allowdelete = true;
+            $roleAccess->allowupdate = true;
+            $roleAccess->codrole = self::ROLE_NAME;
+            $roleAccess->pagename = $nameController;
+            $roleAccess->onlyownerdata = false;
+            if (false === $roleAccess->save()) {
+                // rollback and exit on fail
+                $dataBase->rollback();
+                return;
+            }
+        }
+
+        // without problems = Commit
+        $dataBase->commit();
+    }
+
+    private function migrateOldBalanceAccounts(BalanceCode $balanceCode, DataBase $db, string $tableName): bool
+    {
+        if (false === $db->tableExists($tableName)) {
+            return true;
+        }
+
+        $sql = 'SELECT * FROM ' . $tableName . ' WHERE codbalance = ' . $db->var2str($balanceCode->codbalance) . ';';
+        foreach ($db->select($sql) as $row) {
+            $balanceAccount = new BalanceAccount();
+            $balanceAccount->idbalance = $balanceCode->id;
+            $balanceAccount->codcuenta = $row['codcuenta'];
+            if (false === $balanceAccount->save()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function migrateOldBalances(): void
+    {
+        $db = new DataBase();
+        if (false === $db->tableExists('balances')) {
+            //$this->copyOldBalances($db);
+            return;
+        }
+
+        // inicializamos los modelos para que se creen las tablas
+        new BalanceCode();
+        new BalanceAccount();
+
+        $db->beginTransaction();
+
+        // eliminamos datos de las tablas
+        $db->exec('DELETE FROM balance_accounts;');
+        $db->exec('DELETE FROM balance_codes;');
+
+        foreach ($db->select('SELECT * FROM balances;') as $row) {
+            // copiamos el balance normal
+            $balance = new BalanceCode();
+            $balance->codbalance = $row['codbalance'];
+            $balance->description1 = $row['descripcion1'];
+            $balance->description2 = $row['descripcion2'];
+            $balance->description3 = $row['descripcion3'];
+            $balance->description4 = $row['descripcion4'];
+            $balance->nature = $row['naturaleza'];
+            $balance->level1 = $row['nivel1'];
+            $balance->level2 = $row['nivel2'];
+            $balance->level3 = $row['nivel3'];
+            $balance->level4 = $row['nivel4'];
+            $balance->subtype = 'normal';
+            if (false === $balance->save()) {
+                Tools::log()->warning('balance-code-save-error');
+                $db->rollback();
+                return;
+            }
+
+            // copiamos las cuentas
+            if (false === $this->migrateOldBalanceAccounts($balance, $db, 'balancescuentas')) {
+                $db->rollback();
+                return;
+            }
+
+            // copiamos el balance abreviado
+            $balanceAbr = clone $balance;
+            $balanceAbr->id = null;
+            $balanceAbr->subtype = 'abbreviated';
+            if (false === $balanceAbr->save()) {
+                Tools::log()->warning('balance-code-save-error');
+                $db->rollback();
+                return;
+            }
+
+            // copiamos las cuentas
+            if (false === $this->migrateOldBalanceAccounts($balanceAbr, $db, 'balancescuentasabreviadas')) {
+                $db->rollback();
+                return;
+            }
+        }
+
+        if (false === $this->copyBalancePymes()) {
+            $db->rollback();
+            return;
+        }
+
+        $db->commit();
+
+        // eliminamos las tablas balances, balancescuentas y balancescuentasabreviadas
+        $db->exec('DROP TABLE balancescuentas;');
+        $db->exec('DROP TABLE balancescuentasabreviadas;');
+        $db->exec('DROP TABLE balances;');
+    }
+
+    private function migrateOldReports(): void
+    {
+        $db = new DataBase();
+        $tables = [
+            'reportsamounts' => 'reports_amounts',
+            'reportsbalance' => 'reports_balance',
+            'reportsledger' => 'reports_ledger',
+        ];
+        foreach ($tables as $before => $after) {
+            if (false === $db->tableExists($before) || $db->tableExists($after)) {
+                continue;
+            }
+
+            // renombramos la tabla
+            $sql = 'ALTER TABLE ' . $before . ' RENAME TO ' . $after . ';';
+            if (false === $db->exec($sql)) {
+                Tools::log()->warning('rename-table-error');
+                return;
+            }
+        }
+    }
+}

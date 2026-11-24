@@ -1,0 +1,696 @@
+{#
+* Copyright (C) 2019-2026 Carlos García Gómez <carlos@facturascripts.com>
+* Author Daniel Fernández Giménez <contacto@danielfg.es>
+#}
+
+{% extends "Master/MenuBgTemplate.html.twig" %}
+
+{% set pageData = fsc.getPageData() %}
+
+{% block body %}
+    <div class="container-fluid d-print-none">
+        {{ parent() }}
+        <div class="row">
+            <div class="col-md-7">
+                <div class="d-flex align-items-center">
+                    <div class="btn-group">
+                        <a class="btn btn-sm btn-secondary" href="{{ fsc.url() }}" title="{{ trans('refresh') }}"
+                           aria-label="{{ trans('refresh') }}">
+                            <i class="fa-solid fa-redo" aria-hidden="true"></i>
+                        </a>
+                        <a class="btn btn-sm btn-secondary" href="{{ fsc.url() }}?defaultPage=TRUE"
+                           title="{{ trans('mark-as-homepage') }}"
+                           aria-label="{{ trans('mark-as-homepage') }}">
+                            <i class="fa-regular fa-bookmark" aria-hidden="true"></i>
+                        </a>
+                    </div>
+
+                    <select class="form-select form-select-sm ms-2" id="selectExercise"
+                            title="{{ trans('exercise') }}" aria-label="{{ trans('exercise') }}">
+                        {% for company in fsc.getCompanies() %}
+                            <optgroup label="{{ company.nombrecorto }}">
+                                {% for exercise in company.getExercises() %}
+                                    {% if exercise.codejercicio == fsc.codejercicio %}
+                                        <option value="{{ exercise.codejercicio }}" selected>
+                                            {{ exercise.nombre }}
+                                        </option>
+                                    {% else %}
+                                        <option value="{{ exercise.codejercicio }}">
+                                            {{ exercise.nombre }}
+                                        </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </optgroup>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="col-md-5 text-end">
+                <h1 class="h4 mb-0 d-none d-md-inline-block">
+                    {% set title = trans(fsc.getPageData()['title']) | capitalize %}
+                    {{ title }}<i class="{{ fsc.getPageData()['icon'] }} ms-3" aria-hidden="true"></i>
+                </h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="card border-primary shadow mt-4">
+                    <div class="card-body h5">
+                        <i class="fa-solid fa-chart-line"></i> {{ trans('annual-result') }}
+                        <div class="small text-muted fw-normal mt-1">
+                            {{ trans('result-report-annual-result-info') }}
+                        </div>
+                    </div>
+                    <div class="canva" id="chartsResume">
+                    </div>
+                    <div id="summaryData" class="border-top"></div>
+                    <div class="card-footer small text-muted">
+                        {{ trans('result-report-summary-info') }}
+                    </div>
+                </div>
+
+                <div class="card border-success shadow mt-4">
+                    <h5 class="card-header bg-success text-white pointer d-flex align-items-center" id="showSales">
+                        <button type="button" class="btn btn-success btn-sm btn-spin-action me-2">
+                            <i class="fa fa-plus"></i>
+                        </button>
+                        {{ trans('sales') }}
+                    </h5>
+                    <div class="card-body py-2 small text-muted">
+                        {{ trans('result-report-sales-info') }}
+                    </div>
+                    <div id="salesReport" class="collapse">
+                        <div class="card-body p-0"></div>
+                    </div>
+                </div>
+
+                <div class="card border-warning shadow mt-4">
+                    <h5 class="card-header bg-warning text-white pointer d-flex align-items-center"
+                        id="showPurchasesProductReport">
+                        <button type="button" class="btn btn-warning btn-sm btn-spin-action me-2">
+                            <i class="fa fa-plus"></i>
+                        </button>
+                        {{ trans('purchases') }}
+                    </h5>
+                    <div class="card-body py-2 small text-muted">
+                        {{ trans('result-report-purchases-info') }}
+                    </div>
+                    <div id="purchasesProductReport" class="collapse">
+                        <div class="card-body p-0"></div>
+                    </div>
+                </div>
+
+                <div class="card border-danger shadow mt-4">
+                    <h5 class="card-header bg-danger text-white pointer d-flex align-items-center" id="showPurchases">
+                        <button type="button" class="btn btn-danger btn-sm btn-spin-action me-2">
+                            <i class="fa fa-plus"></i>
+                        </button>
+                        {{ trans('expenses') }}
+                    </h5>
+                    <div class="card-body py-2 small text-muted">
+                        {{ trans('result-report-expenses-info') }}
+                    </div>
+                    <div id="purchasesReport" class="collapse">
+                        <div class="card-body p-0"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6 col-lg-3 d-flex mt-4">
+                <div class="card shadow w-100">
+                    <div class="card-body h5">
+                        <i class="fa-solid fa-chart-pie"></i> {{ trans('sales-per-family') }}
+                        <div class="small text-muted fw-normal mt-1">
+                            {{ trans('result-report-family-info') }}
+                        </div>
+                    </div>
+                    <div class="canva" id="chartsFamilies">
+                    </div>
+                    <div class="table-responsive" id="chartsListFamilies">
+                        <table class="table mb-0 table-sm">
+                            <thead>
+                            <tr>
+                                <th></th>
+                                <th>{{ trans('family') }}</th>
+                                <th class="porc">%</th>
+                                <th class="total">{{ trans('total') }}</th>
+                            </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3 d-flex mt-4">
+                <div class="card shadow w-100">
+                    <div class="card-body h5">
+                        <i class="fa-solid fa-chart-pie"></i> {{ trans('sales-per-serie') }}
+                        <div class="small text-muted fw-normal mt-1">
+                            {{ trans('result-report-invoice-net-info') }}
+                        </div>
+                    </div>
+                    <div class="canva" id="chartsSeries">
+                    </div>
+                    <div class="table-responsive" id="chartsListSeries">
+                        <table class="table mb-0 table-sm">
+                            <thead>
+                            <tr>
+                                <th></th>
+                                <th>{{ trans('serie') }}</th>
+                                <th class="porc">%</th>
+                                <th class="total">{{ trans('total') }}</th>
+                            </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3 d-flex mt-4">
+                <div class="card shadow w-100">
+                    <div class="card-body h5">
+                        <i class="fa-solid fa-chart-pie"></i> {{ trans('sales-per-paymethod') }}
+                        <div class="small text-muted fw-normal mt-1">
+                            {{ trans('result-report-invoice-net-info') }}
+                        </div>
+                    </div>
+                    <div class="canva" id="chartsPagos">
+                    </div>
+                    <div class="table-responsive" id="chartsListPagos">
+                        <table class="table mb-0 table-sm">
+                            <thead>
+                            <tr>
+                                <th></th>
+                                <th>{{ trans('method-payment') }}</th>
+                                <th class="porc">%</th>
+                                <th class="total">{{ trans('total') }}</th>
+                            </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3 d-flex mt-4">
+                <div class="card shadow w-100">
+                    <div class="card-body h5">
+                        <i class="fa-solid fa-chart-pie"></i> {{ trans('sales-per-agent') }}
+                        <div class="small text-muted fw-normal mt-1">
+                            {{ trans('result-report-invoice-net-info') }}
+                        </div>
+                    </div>
+                    <div class="canva" id="chartsAgentes">
+                    </div>
+                    <div class="table-responsive" id="chartsListAgentes">
+                        <table class="table mb-0 table-sm">
+                            <thead>
+                            <tr>
+                                <th></th>
+                                <th>{{ trans('agent') }}</th>
+                                <th class="porc">%</th>
+                                <th class="total">{{ trans('total') }}</th>
+                            </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block css %}
+    {{ parent() }}
+
+    <style>
+        .canva {
+            height: 300px;
+        }
+
+        .card-header .fa {
+            transition: .3s transform ease-in-out;
+        }
+
+        .card-header .collapsed .fa {
+            transform: rotate(90deg);
+        }
+
+        .report-expand-icon {
+            transition: transform .2s ease-in-out;
+            transform-origin: center;
+        }
+
+        tr.report-expanded .report-expand-icon {
+            transform: rotate(90deg);
+        }
+
+        #selectExercise {
+            max-width: 300px;
+        }
+
+        table .porc, table .total, table .month {
+            white-space: nowrap;
+            text-align: right;
+        }
+
+        table .title {
+            width: 15%;
+        }
+
+        table .porc {
+            width: 6%;
+        }
+
+        tr.subfamily {
+            background: #e6f0ff;
+            border-top: 1px solid #000;
+            border-bottom: 1px solid #000;
+        }
+    </style>
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+
+    <script src="{{ asset('Plugins/Informes/node_modules/apexcharts/dist/apexcharts.min.js') }}"></script>
+    <script>
+        let accountReport = '';
+        let agentesChart;
+        let familiesChart;
+        let familyReportSales = '';
+        let familyReportPurchases = '';
+        let pagosChart;
+        let purchasesReport = false;
+        let purchasesProductReport = false;
+        let resumeChart;
+        let salesReport = false;
+        let seriesChart;
+
+        $(document).ready(function () {
+            function initPage() {
+                if (salesReport) {
+                    $('#showSales').click();
+                }
+
+                if (purchasesProductReport) {
+                    $('#showPurchasesProductReport').click();
+                }
+
+                if (purchasesReport) {
+                    $('#showPurchases').click();
+                }
+
+                $('#salesReport .card-body').html('');
+                $('#purchasesReport .card-body').html('');
+                $('#purchasesProductReport .card-body').html('');
+
+
+                let formData = new FormData();
+                formData.append('action', 'load-summary');
+                sendForm(formData);
+            }
+
+            function sendForm(formData) {
+                animateSpinner('add');
+
+                formData.append('codejercicio', $('#selectExercise option:selected').val());
+
+                console.log(Object.fromEntries(formData));
+
+                fetch('{{ fsc.url() }}', {
+                    method: 'POST',
+                    body: formData
+                }).then(function (response) {
+                    if (response.ok) {
+                        return response.json();
+                    }
+                    return Promise.reject(response);
+                }).then(function (data) {
+                    console.log(data);
+
+                    if (data.summary && data.summary !== '') {
+                        $('#summaryData').html(data.summary);
+                        setCharts(data.charts);
+                    }
+
+                    if (data.sales && data.sales !== '') {
+                        $('#salesReport .card-body').html(data.sales);
+                    }
+
+                    if (data.purchasesProduct && data.purchasesProduct !== '') {
+                        $('#purchasesProductReport .card-body').html(data.purchasesProduct);
+                    }
+
+                    if (data.purchases && data.purchases !== '') {
+                        $('#purchasesReport .card-body').html(data.purchases);
+                    }
+
+                    if (data.family && data.family !== '') {
+                        var containerId = data.type == 'load-family-sales' ? '#salesReport' : '#purchasesProductReport';
+                        $(containerId + ' tr').each(function () {
+                            if ($(this).attr('codfamilia') === data.codfamilia) {
+                                $(this).after(data.family);
+                            }
+                        });
+                    }
+
+                    if (data.account && data.account !== '') {
+                        $('#purchasesReport tr').each(function () {
+                            if ($(this).attr('codcuenta') === data.codcuenta) {
+                                $(this).after(data.account);
+                            }
+                        });
+                    }
+
+                    if (Array.isArray(data.messages)) {
+                        data.messages.forEach(item => alert(item.message));
+                    }
+
+                    animateSpinner('remove', true);
+                }).catch(function (error) {
+                    alert('error');
+                    console.warn(error);
+                    animateSpinner('remove', false);
+                });
+
+                return false;
+            }
+
+            function setCharts(charts) {
+                $('#chartsListFamilies table tbody').html(charts['families']['table']);
+                $('#chartsListSeries table tbody').html(charts['series']['table']);
+                $('#chartsListPagos table tbody').html(charts['pagos']['table']);
+                $('#chartsListAgentes table tbody').html(charts['agentes']['table']);
+
+                // Configuración del gráfico de resultado anual en formato ApexCharts
+                let dataResume = {
+                    chart: {
+                        height: 350,
+                        type: 'line',
+                        stacked: false,
+                        toolbar: {
+                            autoSelected: 'zoom'
+                        }
+                    },
+                    dataLabels: {
+                        enabled: false
+                    },
+                    stroke: {
+                        width: [2, 2, 2, 4],
+                        curve: 'straight'
+                    },
+                    colors: ['#4bc0c0', '#ff9f40', '#ff6384', '#36a2eb'],
+                    series: [
+                        {
+                            name: '{{ trans('sales') }}',
+                            data: charts['totales']['ventas']
+                        },
+                        {
+                            name: '{{ trans('purchases') }}',
+                            data: charts['totales']['compras']
+                        },
+                        {
+                            name: '{{ trans('expenses') }}',
+                            data: charts['totales']['gastos']
+                        },
+                        {
+                            name: '{{ trans('result') }}',
+                            data: charts['totales']['resultado']
+                        }
+                    ],
+                    xaxis: {
+                        categories: [
+                            "{{ trans('january') }}",
+                            "{{ trans('february') }}",
+                            "{{ trans('march') }}",
+                            "{{ trans('april') }}",
+                            "{{ trans('may') }}",
+                            "{{ trans('june') }}",
+                            "{{ trans('july') }}",
+                            "{{ trans('august') }}",
+                            "{{ trans('september') }}",
+                            "{{ trans('october') }}",
+                            "{{ trans('november') }}",
+                            "{{ trans('december') }}"
+                        ]
+                    },
+                    yaxis: {
+                        labels: {
+                            formatter: function (value) {
+                                return value !== null && value !== undefined ? value.toFixed(2) : '0.00';
+                            }
+                        }
+                    },
+                    tooltip: {
+                        shared: true,
+                        intersect: false
+                    },
+                    legend: {
+                        horizontalAlign: 'left'
+                    }
+                };
+                // Configuración de gráficos de donut en formato ApexCharts
+                let dataFamilies = {
+                    chart: {
+                        type: 'donut',
+                        height: 300
+                    },
+                    series: charts['families']['porc'],
+                    labels: charts['families']['labels'],
+                    colors: charts['families']['colors'],
+                    dataLabels: {
+                        enabled: false
+                    },
+                    tooltip: {
+                        y: {
+                            formatter: function (value, { seriesIndex }) {
+                                return charts['families']['totales'][seriesIndex];
+                            }
+                        }
+                    },
+                    legend: {
+                        show: false
+                    }
+                };
+                let dataSeries = {
+                    chart: {
+                        type: 'donut',
+                        height: 300
+                    },
+                    series: charts['series']['porc'],
+                    labels: charts['series']['labels'],
+                    colors: charts['series']['colors'],
+                    dataLabels: {
+                        enabled: false
+                    },
+                    tooltip: {
+                        y: {
+                            formatter: function (value, { seriesIndex }) {
+                                return charts['series']['totales'][seriesIndex];
+                            }
+                        }
+                    },
+                    legend: {
+                        show: false
+                    }
+                };
+                let dataPagos = {
+                    chart: {
+                        type: 'donut',
+                        height: 300
+                    },
+                    series: charts['pagos']['porc'],
+                    labels: charts['pagos']['labels'],
+                    colors: charts['pagos']['colors'],
+                    dataLabels: {
+                        enabled: false
+                    },
+                    tooltip: {
+                        y: {
+                            formatter: function (value, { seriesIndex }) {
+                                return charts['pagos']['totales'][seriesIndex];
+                            }
+                        }
+                    },
+                    legend: {
+                        show: false
+                    }
+                };
+                let dataAgentes = {
+                    chart: {
+                        type: 'donut',
+                        height: 300
+                    },
+                    series: charts['agentes']['porc'],
+                    labels: charts['agentes']['labels'],
+                    colors: charts['agentes']['colors'],
+                    dataLabels: {
+                        enabled: false
+                    },
+                    tooltip: {
+                        y: {
+                            formatter: function (value, { seriesIndex }) {
+                                return charts['agentes']['totales'][seriesIndex];
+                            }
+                        }
+                    },
+                    legend: {
+                        show: false
+                    }
+                };
+
+                if (resumeChart != null) {
+                    resumeChart.destroy();
+                }
+
+                if (familiesChart != null) {
+                    familiesChart.destroy();
+                }
+
+                if (seriesChart != null) {
+                    seriesChart.destroy();
+                }
+
+                if (pagosChart != null) {
+                    pagosChart.destroy();
+                }
+
+                if (agentesChart != null) {
+                    agentesChart.destroy();
+                }
+
+                let canvaResume = document.getElementById("chartsResume");
+                resumeChart = new ApexCharts(canvaResume, dataResume);
+                resumeChart.render();
+
+
+                let canvaFamilies = document.getElementById("chartsFamilies");
+                familiesChart = new ApexCharts(canvaFamilies, dataFamilies);
+                familiesChart.render();
+
+                let canvaSeries = document.getElementById("chartsSeries");
+                seriesChart = new ApexCharts(canvaSeries, dataSeries);
+                seriesChart.render();
+
+                let canvaPagos = document.getElementById("chartsPagos");
+                pagosChart = new ApexCharts(canvaPagos, dataPagos);
+                pagosChart.render();
+
+                let canvaAgentes = document.getElementById("chartsAgentes");
+                agentesChart = new ApexCharts(canvaAgentes, dataAgentes);
+                agentesChart.render();
+            }
+
+            function handleReportToggle(reportElementId, reportFlag, action, additionalAction) {
+                const reportElement = $(reportElementId);
+                reportElement.find('svg').toggleClass('fa-plus fa-minus');
+                reportFlag = !reportFlag;
+
+                if (reportFlag) {
+                    let formData = new FormData();
+                    formData.append('action', action);
+                    if (additionalAction) {
+                        formData.append(additionalAction.key, additionalAction.value);
+                    }
+                    sendForm(formData);
+                }
+
+                $(reportElementId + 'Report').collapse('toggle');
+                return reportFlag;
+            }
+
+            function setExpandedRow(element, rowSelector, expanded) {
+                const rows = $(element).closest('tbody').find(rowSelector);
+                rows.removeClass('report-expanded');
+
+                if (expanded) {
+                    $(element).addClass('report-expanded');
+                }
+            }
+
+            function handleSubReportClick(element, reportFlag, parentAttribute, action) {
+
+                if (reportFlag) {
+                    const parentValue = $(element).attr(parentAttribute);
+                    $(element).closest('tr').siblings('tr.subfamily').remove();
+
+                    familyReport = action === 'load-family-sales' ? familyReportSales : familyReportPurchases;
+                    setExpandedRow(element, 'tr.ventas', familyReport !== parentValue);
+
+                    if (familyReport === parentValue) {
+                        action === 'load-family-sales' ? familyReportSales = '' : familyReportPurchases = '';
+                        return;
+                    }
+
+                    action === 'load-family-sales' ? familyReportSales = parentValue : familyReportPurchases = parentValue;
+                    let formData = new FormData();
+                    formData.append('action', action);
+                    formData.append('parent_' + parentAttribute, parentValue);
+                    sendForm(formData);
+                }
+            }
+
+            $(document).on('change', '#selectExercise', function () {
+                initPage();
+            });
+
+            $(document).on('click', '#showSales', function () {
+                salesReport = handleReportToggle('#sales', salesReport, 'load-sales');
+            });
+
+            $(document).on('click', '#salesReport tr.ventas', function () {
+                handleSubReportClick(this, salesReport, 'codfamilia', 'load-family-sales');
+            });
+
+            $(document).on('click', '#showPurchasesProductReport', function () {
+                purchasesProductReport = handleReportToggle('#purchasesProduct', purchasesProductReport, 'load-purchases-product');
+            });
+
+            $(document).on('click', '#purchasesProductReport tr.ventas', function () {
+                handleSubReportClick(this, purchasesProductReport, 'codfamilia', 'load-family-purchases');
+            });
+
+            $(document).on('click', '#showPurchases', function () {
+                if (purchasesReport === false) {
+                    $('#showPurchases svg').removeClass('fa-plus').addClass('fa-minus');
+                    purchasesReport = true;
+                    let formData = new FormData();
+                    formData.append('action', 'load-purchases');
+                    sendForm(formData);
+                } else {
+                    $('#showPurchases svg').addClass('fa-plus').removeClass('fa-minus');
+                    purchasesReport = false;
+                }
+                $('#purchasesReport').collapse('toggle');
+            });
+
+            $(document).on('click', '#purchasesReport tr.gastos', function () {
+                if (purchasesReport) {
+                    const codcuenta = $(this).attr('codcuenta');
+                    $(this).closest('tbody').find('tr.subaccount').remove();
+                    setExpandedRow(this, 'tr.gastos', accountReport !== codcuenta);
+
+                    if (accountReport === codcuenta) {
+                        accountReport = '';
+                        return;
+                    }
+
+                    accountReport = codcuenta;
+
+                    let formData = new FormData();
+                    formData.append('action', 'load-account');
+                    formData.append('parent_codcuenta', accountReport);
+                    sendForm(formData);
+                }
+            });
+
+            initPage();
+        });
+    </script>
+{% endblock %}

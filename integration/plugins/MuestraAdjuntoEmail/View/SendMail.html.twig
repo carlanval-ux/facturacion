@@ -1,0 +1,65 @@
+{# Heredamos de la vista original del Core #}
+{% extends "@Core/SendMail.html.twig" %}
+
+{% block body %}
+    {# 1. Cargamos el contenido original de la página (Formulario, botones, etc.) #}
+    {{ parent() }}
+
+    {# 
+       2. Pre-generamos las URLs firmadas en PHP/Twig para cada adjunto.
+       Esto asegura que el token de seguridad (?myft=...) sea válido para cada archivo.
+    #}
+    {# Nombre real en disco del PDF del documento: desde 2026.7 el core lo guarda con un sufijo único (_mail_<hora>_<código>) y lo muestra sin él.
+       queryOrInput solo existe desde 2025.4; en cores anteriores el nombre mostrado ya es el de disco y no hace falta. #}
+    {% set diskFile = (fsc.request.queryOrInput is defined) ? fsc.request.queryOrInput('fileName', '') : '' %}
+    {% set diskFileOk = diskFile is not empty and '/' not in diskFile and '\\' not in diskFile and '..' not in diskFile %}
+    {% set attachmentsMap = {} %}
+    {% for name in fsc.newMail.getAttachmentNames() %}
+        {% set stem = name | split('.') | slice(0, -1) | join('.') %}
+        {# Si el adjunto es ese PDF enlazamos su nombre real en disco; si no, el nombre tal cual #}
+        {% set diskName = (diskFileOk and stem is not empty and diskFile starts with (stem ~ '_mail_')) ? diskFile : name %}
+        {# Generamos la URL firmada específica para este archivo temporal #}
+        {% set fileUrl = myFilesUrl('MyFiles/Tmp/Email/' ~ diskName) %}
+        {% set attachmentsMap = attachmentsMap | merge({ (name): fileUrl }) %}
+    {% endfor %}
+
+    {# 3. Pasamos los datos a un bloque invisible para que JavaScript pueda leerlos #}
+    <script id="adjuntos-visor-data" type="application/json">
+        {{ attachmentsMap | json_encode | raw }}
+    </script>
+
+    {# 4. Script para transformar los nombres de texto en enlaces clicables #}
+    <script>
+        (function() {
+            document.addEventListener("DOMContentLoaded", function() {
+                // Leemos el mapa de URLs que generamos arriba en Twig
+                const dataElement = document.getElementById('adjuntos-visor-data');
+                if (!dataElement) return;
+
+                const urlsMap = JSON.parse(dataElement.innerHTML);
+
+                // Buscamos los iconos de adjuntos (el icono del "clip")
+                const icons = document.querySelectorAll('p i.fa-paperclip');
+
+                icons.forEach(icon => {
+                    const p = icon.parentElement;
+                    const fileName = p.textContent.trim();
+
+                    // Si el nombre del archivo está en nuestro mapa de URLs
+                    if (urlsMap[fileName]) {
+                        const secureUrl = urlsMap[fileName];
+
+                        // Transformamos el párrafo en un enlace estilizado y seguro
+                        p.innerHTML = `
+                            <i class="fas fa-paperclip fa-fw" aria-hidden="true"></i> 
+                            <a href="${secureUrl}" target="_blank" title="Previsualizar PDF en pestaña nueva" 
+                               style="text-decoration: underline; color: #007bff; font-weight: bold; cursor: pointer;">
+                                ${fileName}
+                            </a>
+                        `;
+                    }
+                });
+            });
+        })();
+    </script>
+{% endblock %}

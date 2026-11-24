@@ -1,0 +1,109 @@
+<?php
+/**
+ * This file is part of Informes plugin for FacturaScripts
+ * Copyright (C) 2020-2026 Carlos García Gómez <carlos@facturascripts.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+namespace FacturaScripts\Plugins\Informes\Model\Join;
+
+use FacturaScripts\Core\Template\JoinModel;
+use FacturaScripts\Core\Where;
+
+/**
+ * Description of FacturaClienteProducto
+ *
+ * @author Carlos García Gómez <carlos@facturascripts.com>
+ */
+class FacturaClienteProducto extends JoinModel
+{
+    const DOC_TABLE = 'facturascli';
+    const MAIN_TABLE = 'lineasfacturascli';
+
+    public function url(string $type = 'auto', string $list = 'List'): string
+    {
+        return 'ReportProducto';
+    }
+
+    /**
+     * Carga la descripción aparte para que no entre en el GROUP BY (columna TEXT).
+     *
+     * @param Where[] $where
+     */
+    public static function all(array $where = [], array $order = [], int $offset = 0, int $limit = 0): array
+    {
+        $result = parent::all($where, $order, $offset, $limit);
+
+        $productIds = array_unique(array_filter(
+            array_map(fn($item) => $item->idproducto, $result),
+            fn($idproducto) => $idproducto !== null
+        ));
+        if (empty($productIds)) {
+            return $result;
+        }
+
+        $descriptions = [];
+        $sql = 'SELECT idproducto, descripcion FROM productos WHERE idproducto IN ('
+            . implode(',', array_map('intval', $productIds)) . ')';
+        foreach (self::db()->select($sql) as $row) {
+            $descriptions[$row['idproducto']] = $row['descripcion'];
+        }
+
+        foreach ($result as $item) {
+            $item->descripcion = $descriptions[$item->idproducto] ?? null;
+        }
+
+        return $result;
+    }
+
+    protected function getFields(): array
+    {
+        return [
+            'avgbeneficio' => 'sum(' . static::MAIN_TABLE . '.pvptotal) / sum(' . static::MAIN_TABLE . '.cantidad) - variantes.coste',
+            'avgprecio' => 'sum(' . static::MAIN_TABLE . '.pvptotal) / sum(' . static::MAIN_TABLE . '.cantidad)',
+            'cantidad' => 'sum(' . static::MAIN_TABLE . '.cantidad)',
+            'codalmacen' => static::DOC_TABLE . '.codalmacen',
+            'codfabricante' => 'productos.codfabricante',
+            'codfamilia' => 'productos.codfamilia',
+            'coste' => 'variantes.coste',
+            'idproducto' => static::MAIN_TABLE . '.idproducto',
+            'precio' => 'variantes.precio',
+            'referencia' => static::MAIN_TABLE . '.referencia',
+            'stockfis' => 'stocks.cantidad'
+        ];
+    }
+
+    protected function getGroupFields(): string
+    {
+        return static::DOC_TABLE . '.codalmacen, ' . static::MAIN_TABLE . '.idproducto, '
+            . static::MAIN_TABLE . '.referencia, productos.codfabricante, productos.codfamilia, variantes.coste, '
+            . 'variantes.precio, stocks.cantidad';
+    }
+
+    protected function getSQLFrom(): string
+    {
+        return static::MAIN_TABLE
+            . ' LEFT JOIN variantes ON ' . static::MAIN_TABLE . '.referencia = variantes.referencia'
+            . ' LEFT JOIN productos ON variantes.idproducto = productos.idproducto'
+            . ' LEFT JOIN facturascli ON facturascli.idfactura = lineasfacturascli.idfactura'
+            . ' LEFT JOIN stocks ON stocks.referencia = ' . static::MAIN_TABLE . '.referencia'
+            . ' AND stocks.codalmacen = ' . static::DOC_TABLE . '.codalmacen';
+    }
+
+    protected function getTables(): array
+    {
+        return [static::MAIN_TABLE, 'productos', 'variantes', 'stocks'];
+    }
+}
