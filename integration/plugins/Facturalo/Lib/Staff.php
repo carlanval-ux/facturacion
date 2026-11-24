@@ -5,6 +5,7 @@ use FacturaScripts\Core\Lib\MenuItem;
 use FacturaScripts\Core\Tools;
 use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\ApiKey;
+use FacturaScripts\Dinamic\Model\Settings;
 use FacturaScripts\Dinamic\Model\User;
 
 /**
@@ -25,15 +26,23 @@ final class Staff
     /** Controladores que también usan procesos sin sesión (cron, despliegue): solo se bloquean a una sesión de cliente. */
     const SESSION_ONLY = ['cron', 'deploy'];
 
+    /** Lista guardada, leída siempre de la base de datos (no de la caché de ajustes): quitar a alguien del staff debe surtir efecto al instante. */
+    private static function stored(): ?string
+    {
+        $model = new Settings();
+        $value = $model->load('facturalo') ? ($model->getProperties()['staff_nicks'] ?? null) : null;
+        return is_string($value) ? $value : null;
+    }
+
     public static function nicks(): array
     {
-        $list = (string)Tools::settings('facturalo', 'staff_nicks', '');
+        $list = (string)self::stored();
         return array_values(array_filter(array_map('trim', explode(',', $list)), 'strlen'));
     }
 
     public static function seed(): void
     {
-        if (null === Tools::settings('facturalo', 'staff_nicks', null)) {
+        if (null === self::stored()) {
             Tools::settingsSet('facturalo', 'staff_nicks', self::DEFAULT_NICKS);
             Tools::settingsSave();
         }

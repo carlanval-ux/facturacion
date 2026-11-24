@@ -11,6 +11,7 @@ final class StaffTest extends TestCase
     protected function setUp(): void
     {
         Tools::settingsSet('facturalo', 'staff_nicks', 'admin, Carlos');
+        Tools::settingsSave();
     }
 
     public function testStaffSinDistinguirMayusculas(): void
