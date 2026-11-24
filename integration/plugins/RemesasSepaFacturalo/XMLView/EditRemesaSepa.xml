@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <group name="data" numcolumns="12">
+            <column name="code" numcolumns="4" order="100">
+                <widget type="text" fieldname="codigo" readonly="true"/>
+            </column>
+            <column name="date" numcolumns="2" order="110">
+                <widget type="datetime" fieldname="fecha" readonly="true"/>
+            </column>
+            <column name="status" numcolumns="2" order="120">
+                <widget type="text" fieldname="estado" readonly="true"/>
+            </column>
+            <column name="sepa-receipts-count" numcolumns="2" order="130">
+                <widget type="number" fieldname="numrecibos" decimal="0" readonly="true"/>
+            </column>
+            <column name="total" numcolumns="2" order="140">
+                <widget type="money" fieldname="total" readonly="true"/>
+            </column>
+        </group>
+    </columns>
+</view>
