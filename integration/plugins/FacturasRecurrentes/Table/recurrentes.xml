@@ -18,7 +18,7 @@
     <column><name>fecha_fin</name><type>date</type></column>
     <column><name>proxima</name><type>date</type></column>
     <column><name>pct_primero</name><type>double precision</type><default>100</default></column>
-    <column><name>fecha_pasada</name><type>character varying(10)</type><default>'prevista'</default></column>
+    <column><name>fecha_pasada</name><type>character varying(10)</type><default>'ajustada'</default></column>
     <column><name>enviar_email</name><type>boolean</type><default>false</default></column>
     <column><name>creado</name><type>timestamp</type></column>
     <constraint><name>recurrentes_pkey</name><type>PRIMARY KEY (idrecurrente)</type></constraint>
