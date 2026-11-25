@@ -1,6 +1,6 @@
 # Facturalo — control MASTER de tenants (contrato servidor)
 
-- **Estado:** diseñado e implementado en local; **nada instalado ni ejecutado en `rt-tpv-prod-01`**, ni DNS tocado. Instalar y activar requiere autorización del OWNER (el host aloja producción del TPV).
+- **Estado (2026-11-25):** diseñado e implementado y probado en local. **Comodín DNS `*.facturalo.redtelecom.app` creado en OVH (id 5451557702, TTL 300)** con autorización del OWNER; comprobado antes que nginx tiene `default_server` `return 444` (`000-catchall`) y que no hay CAA. **Agente NO instalado**: requiere root en el host (el usuario `ploi` solo tiene sudo sin contraseña para los 3 scripts `fs-*`).
 - **Fecha:** 2026-11-25 · **Modelo:** ADR-0002/0013/0014/0019 del TPV (retail-pos), adaptado a FacturaScripts.
 - **Código:** `deploy/fs-tpv/master/` (`lib.php` puro, `agent.php`, `systemd/`, `install-master-agent.sh`, `tests/run.php`).
 - **Consumidor:** panel MASTER de Teleco/Clarto (perfil `PRODUCTO=facturalo`, operadores con MFA y roles). El panel **solo escribe peticiones y lee respuestas**; nunca toca BD ni shell del host.
@@ -153,16 +153,15 @@ Por qué:
 
 **No probado** (necesita host real y autorización): los scripts de host reales encadenados por el agente (`fs-*`), `certbot`, el `include` nginx real sobre un vhost con bloques TLS de certbot, `nginx -t`/`reload`, el SQL contra MySQL real (sentencias `UPDATE empresas`, `INSERT users`, `JSON_SET` sobre `settings`: copiadas del esquema de FS pero **no ejecutadas**), el chroot SFTP, el endurecimiento systemd, y `RealHost::exec` (timeouts). Se recomienda un ensayo en el staging del TPV o en un contenedor antes de producción.
 
-## 9. Para el OWNER (decisiones y autorizaciones)
+## 9. Decisiones tomadas (OWNER delegó 2026-11-25)
 
-1. **Autorizar la instalación** del agente en `rt-tpv-prod-01` (`install-master-agent.sh`, no ejecutado) y, antes, un ensayo en staging/contenedor.
-2. **DNS:** aprobar el comodín `*.facturalo.redtelecom.app → 151.80.149.132` en OVH. Antes de crearlo, comprobar **solo lectura** en el host que existe `default_server` con `return 444` en 80 y 443 y que no hay un CAA restrictivo.
-3. **Firma:** aceptar HMAC simétrico ahora o exigir Ed25519 antes de producción.
-4. **Contraseña inicial** en la respuesta (una vez) vs. enlace de invitación (requiere plugin FS nuevo).
-5. **Baja real** (`deprovision`): no existe por diseño; definir política de retención/copia antes de implementarla.
-6. Lista de **slugs reservados** y de **tenants protegidos** (`redtelecom`, `teleco-test`, `carlos`): confirmar. `carlos` quedó fuera del agente (no tiene `.master.json`); si se quiere gestionar, hay que adoptarlo con un registro explícito.
-7. **Clave de firma** (`/etc/fs-master/keys/m1.key`) y `authorized_keys` de `fs-master`: las genera y custodia el OWNER; el panel Teleco/Clarto la guarda en su gestor de secretos.
-8. Release por defecto y canal de subida del artefacto (`fs-deploy.yml` hoy sube a `~ploi/fs-releases/<run_id>/fs-release.tar.gz`; el agente espera `fs-releases/<tag>.tar.gz` + `.sha256`: falta un paso de publicación con etiqueta).
+1. Instalación: autorizada; pendiente de acceso root (`sudo bash install-master-agent.sh` desde `/home/ploi`), más clave `m1.key`, authorized_keys y sshd.
+2. DNS: comodín creado (ver Estado).
+3. Firma: **HMAC-SHA256 por ahora** (probado); Ed25519 queda como `sig.alg` futuro (el host sí tiene sodium).
+4. Contraseña inicial: una sola vez en la respuesta firmada; sin plugin de invitación.
+5. Rollback solo reversible; la baja real no se implementa (solo dry-run) hasta definir retención y copia.
+6. Publicación de release: `fs-deploy.yml` sube también `~ploi/fs-releases/<tag>.tar.gz` + `.sha256` cuando se lanza con un tag `fs-v*`; ese tag es `release.tag`.
+7. Pendiente OWNER: confirmar slugs reservados y tenants protegidos; `carlos` queda fuera del agente.
 
 ## 10. Obligaciones del lado MASTER (Teleco/Clarto)
 
