@@ -1,8 +1,8 @@
 # Facturalo — control MASTER de tenants (contrato servidor)
 
-- **Estado:** diseñado e implementado en local; **nada instalado ni ejecutado en `rt-tpv-prod-01`**, ni DNS tocado. Instalar y activar requiere autorización del OWNER (el host aloja producción del TPV).
+- **Estado (2026-11-25):** diseñado e implementado y probado en local. **Comodín DNS `*.facturalo.redtelecom.app` creado en OVH (id 5451557702, TTL 300)** con autorización del OWNER; comprobado antes que nginx tiene `default_server` `return 444` (`000-catchall`) y que no hay CAA. **Agente NO instalado**: requiere root en el host (el usuario `ploi` solo tiene sudo sin contraseña para los 3 scripts `fs-*`).
 - **Fecha:** 2026-11-25 · **Modelo:** ADR-0002/0013/0014/0019 del TPV (retail-pos), adaptado a FacturaScripts.
-- **Código:** `deploy/fs-tpv/master/` (`lib.php` puro, `agent.php`, `systemd/`, `install-master-agent.sh`, `tests/run.php`).
+- **Código:** `deploy/fs-tpv/master/` (`lib.php` puro, `agent.php`, `systemd/`, `instalar-todo.sh`, `tests/run.php`).
 - **Consumidor:** panel MASTER de Teleco/Clarto (perfil `PRODUCTO=facturalo`, operadores con MFA y roles). El panel **solo escribe peticiones y lee respuestas**; nunca toca BD ni shell del host.
 
 ## 1. Arquitectura
@@ -93,7 +93,7 @@ Los 7 módulos (`facturalo.modulos.<clave>` en `settings`, fila `facturalo`): `i
 
 - `status`: `succeeded` · `failed` (se ejecutó y falló; ver `error` y `result.rollback`) · `rejected` (no se ejecutó nada: firma, contrato, estado). `error = {step, code, message, retryable}` en `failed`; en `rejected` el motivo va en `result` (`{step, code, message}`).
 - `steps[].status`: `ok` · `skipped` (ya hecho / reanudación / noop) · `failed`.
-- Códigos: `BAD_JSON`, `BAD_SIGNATURE`, `INVALID`, `REQUEST_ID_REUSED`, `PROTECTED`, `SLUG_BOUND` (slug de otro `tenant.id`), `SLUG_TAKEN` (instalación no gestionada), `BAD_STATE`, y de paso: `DNS_NOT_READY`*, `RELEASE_MISSING`, `PROVISION_FAILED`, `BOOTSTRAP_FAILED`, `DEPLOY_FAILED`, `HEALTH_FAILED`*, `SERIAL_NOT_NEWER`, `NO_VHOST`, `NGINX_TEST_FAILED`, `NGINX_RELOAD_FAILED` (* = `retryable`).
+- Códigos: `BAD_JSON`, `BAD_SIGNATURE`, `INVALID`, `REQUEST_ID_REUSED`, `PROTECTED`, `SLUG_BOUND` (slug de otro `tenant.id`), `SLUG_TAKEN` (instalación no gestionada), `BAD_STATE`, y de paso: `DNS_NOT_READY`*, `RELEASE_MISSING`, `PROVISION_FAILED`, `BOOTSTRAP_FAILED`, `DEPLOY_FAILED`, `HEALTH_FAILED`*, `EMAIL_TEMPLATE_MISSING`, `EMAIL_TEMPLATE_INVALID`, `EMAIL_NOT_CONFIGURED`, `EMAIL_SMTP_UNREACHABLE`*, `SERIAL_NOT_NEWER`, `NO_VHOST`, `NGINX_TEST_FAILED`, `NGINX_RELOAD_FAILED` (* = `retryable`).
 - **Contraseña inicial del administrador:** solo en la respuesta de un `provision` `succeeded` (el panel debe mostrarla **una vez** al operador y no guardarla en claro; FS no tiene “cambiar al primer inicio”, así que se pide al cliente cambiarla o usar «recuperar contraseña»). En el host solo queda su hash; el estado interno la sustituye por `[entregada]`. Se crea al final del alta (paso `admin`), así un alta fallida nunca deja usuario. **Pendiente de decisión OWNER:** alternativa con enlace de invitación (como el TPV) requeriría un plugin FS que no existe.
 
 ## 6. Estados y acciones
@@ -106,7 +106,7 @@ Estado del tenant (en el registro del host `/etc/fs/tenants/<slug>.master.json`)
 | `suspend` | active | `suspended` | ya suspendido = `noop`. Fragmento nginx `return 503;` incluido en el vhost (datos, BD y pool intactos); `nginx -t` antes de recargar, si falla se revierte |
 | `reactivate` | suspended | `active` | ya activo = `noop` |
 | `entitlements` | active, suspended | igual | `serial` estrictamente creciente por tenant (anti-rollback → `SERIAL_NOT_NEWER`); escribe los 7 ajustes y vacía `FileCache` |
-| `status` | cualquiera | igual | solo lectura: estado, módulos y serial, vhost, instalado, release, `GET /login`, DNS |
+| `status` | cualquiera | igual | solo lectura: estado, módulos y serial, vhost, instalado, release, `GET /login`, DNS, `email_configured` (booleano; nunca valores) |
 | `preflight` | cualquiera | igual | DNS + release disponible; no crea nada |
 | `deprovision-dry-run` | cualquiera | igual | lista lo que una baja eliminaría; **la baja real no existe** (hace falta decisión del OWNER y copia previa) |
 
@@ -118,9 +118,10 @@ Estado del tenant (en el registro del host `/etc/fs/tenants/<slug>.master.json`)
 4. `bootstrap` — `fs-bootstrap-tenant`: instala FS, **certbot por host (HTTP-01)**, activa `TelecoBridge`, `Facturalo` y los 7 plugins de módulo (`FS_EXTRA_PLUGINS`), crea el token de API mínimo.
 5. `deploy` — `fs-deploy-release` (mueve `config.php`/`MyFiles` a `shared`, activa la release, `Plugins::deploy`, salud; revierte solo si falla).
 6. `company` — sustituye la empresa ficticia del asistente por los datos reales (UPDATE parametrizado).
-7. `entitlements` — escribe los 7 `facturalo.modulos.*`.
-8. `verify` — `GET https://<host>/login` = 200.
-9. `admin` — usuario propietario (nick derivado del correo) con contraseña aleatoria.
+7. `email` — copia el grupo de ajustes `email` de FS (SMTP noreply) desde la plantilla `/etc/fs-master/email-template.json` (root 600, JSON objeto con al menos `email`, `host`, `password`; nunca va en la petición, el repo ni los logs: el SQL se registra con parámetros ocultos), vacía `FileCache` (`tools-settings.cache` oculta el cambio), comprueba la misma condición que `NewMail::canSendMail()` (email, host y password no vacíos) y que el SMTP responde por TCP. **No envía correo real**: `/RecuperarClave` responde igual envíe o no, y mandaría un enlace al cliente. La plantilla se valida ya en `preflight` (`EMAIL_TEMPLATE_MISSING`/`EMAIL_TEMPLATE_INVALID`, antes de crear nada).
+8. `entitlements` — escribe los 7 `facturalo.modulos.*`.
+9. `verify` — `GET https://<host>/login` = 200.
+10. `admin` — usuario propietario (nick derivado del correo) con contraseña aleatoria.
 
 **Rollback (decisión):** solo se deshace lo **reversible**: si falló tras crear el tenant se deshabilita el vhost (deja de servirse lo a medias) y el registro pasa a `error`. **Nunca se borran datos, BD ni usuarios del sistema**: borrar es irreversible y el host aloja producción. Reintentar con otro `request_id` reanuda (repone el vhost y continúa). La limpieza total de un alta fallida es manual.
 
@@ -142,7 +143,7 @@ Por qué:
 
 ## 8. Pruebas realizadas (de verdad) y límites
 
-`php deploy/fs-tpv/master/tests/run.php` → **121 comprobaciones, 0 fallos**, sin tocar red ni servidor (PHP 8.5 local, `SimHost` en memoria):
+`php deploy/fs-tpv/master/tests/run.php` → **136 comprobaciones, 0 fallos**, sin tocar red ni servidor (PHP 8.5 local, `SimHost` en memoria):
 
 - Slug: válidos, 13+ inválidos/reservados/inyección (`../x`, `a\nb`, `ab;rm`, `xn--`, `a--b`).
 - Firma: canónico, firma válida, dominio req/resp, kid desconocido, clave corta, documento manipulado, sin firma, `alg:none`.
@@ -153,16 +154,15 @@ Por qué:
 
 **No probado** (necesita host real y autorización): los scripts de host reales encadenados por el agente (`fs-*`), `certbot`, el `include` nginx real sobre un vhost con bloques TLS de certbot, `nginx -t`/`reload`, el SQL contra MySQL real (sentencias `UPDATE empresas`, `INSERT users`, `JSON_SET` sobre `settings`: copiadas del esquema de FS pero **no ejecutadas**), el chroot SFTP, el endurecimiento systemd, y `RealHost::exec` (timeouts). Se recomienda un ensayo en el staging del TPV o en un contenedor antes de producción.
 
-## 9. Para el OWNER (decisiones y autorizaciones)
+## 9. Decisiones tomadas (OWNER delegó 2026-11-25)
 
-1. **Autorizar la instalación** del agente en `rt-tpv-prod-01` (`install-master-agent.sh`, no ejecutado) y, antes, un ensayo en staging/contenedor.
-2. **DNS:** aprobar el comodín `*.facturalo.redtelecom.app → 151.80.149.132` en OVH. Antes de crearlo, comprobar **solo lectura** en el host que existe `default_server` con `return 444` en 80 y 443 y que no hay un CAA restrictivo.
-3. **Firma:** aceptar HMAC simétrico ahora o exigir Ed25519 antes de producción.
-4. **Contraseña inicial** en la respuesta (una vez) vs. enlace de invitación (requiere plugin FS nuevo).
-5. **Baja real** (`deprovision`): no existe por diseño; definir política de retención/copia antes de implementarla.
-6. Lista de **slugs reservados** y de **tenants protegidos** (`redtelecom`, `teleco-test`, `carlos`): confirmar. `carlos` quedó fuera del agente (no tiene `.master.json`); si se quiere gestionar, hay que adoptarlo con un registro explícito.
-7. **Clave de firma** (`/etc/fs-master/keys/m1.key`) y `authorized_keys` de `fs-master`: las genera y custodia el OWNER; el panel Teleco/Clarto la guarda en su gestor de secretos.
-8. Release por defecto y canal de subida del artefacto (`fs-deploy.yml` hoy sube a `~ploi/fs-releases/<run_id>/fs-release.tar.gz`; el agente espera `fs-releases/<tag>.tar.gz` + `.sha256`: falta un paso de publicación con etiqueta).
+1. Instalación: autorizada; pendiente de acceso root (`sudo bash instalar-todo.sh` desde `/home/ploi`), más clave `m1.key`, authorized_keys y sshd.
+2. DNS: comodín creado (ver Estado).
+3. Firma: **HMAC-SHA256 por ahora** (probado); Ed25519 queda como `sig.alg` futuro (el host sí tiene sodium).
+4. Contraseña inicial: una sola vez en la respuesta firmada; sin plugin de invitación.
+5. Rollback solo reversible; la baja real no se implementa (solo dry-run) hasta definir retención y copia.
+6. Publicación de release: `fs-deploy.yml` sube también `~ploi/fs-releases/<tag>.tar.gz` + `.sha256` cuando se lanza con un tag `fs-v*`; ese tag es `release.tag`.
+7. Pendiente OWNER: confirmar slugs reservados y tenants protegidos; `carlos` queda fuera del agente.
 
 ## 10. Obligaciones del lado MASTER (Teleco/Clarto)
 

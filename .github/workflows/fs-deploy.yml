@@ -43,4 +43,8 @@ jobs:
           S="ssh -i ~/.ssh/k -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes ploi@$HOST"
           D="fs-releases/$GITHUB_RUN_ID"
           $S "mkdir -p $D" && scp -i ~/.ssh/k -o IdentitiesOnly=yes fs-release.tar.gz fs-release.tar.gz.sha256 "ploi@$HOST:$D/"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then   # publicacion con etiqueta para el agente MASTER (release.tag = nombre del tag)
+            T="$GITHUB_REF_NAME"; sed "s/fs-release.tar.gz/$T.tar.gz/" fs-release.tar.gz.sha256 > "$T.tar.gz.sha256"; cp fs-release.tar.gz "$T.tar.gz"
+            scp -i ~/.ssh/k -o IdentitiesOnly=yes "$T.tar.gz" "$T.tar.gz.sha256" "ploi@$HOST:fs-releases/"
+          fi
           for SLUG in $SLUGS; do $S "sudo /usr/local/sbin/fs-deploy-release '$SLUG' '/home/ploi/$D/fs-release.tar.gz'"; done

@@ -1,8 +1,10 @@
-# /etc/ssh/sshd_config.d/fs-master.conf  (EJEMPLO, no se instala solo). El operador MASTER solo puede subir peticiones y leer respuestas por SFTP,
-# enjaulado, sin shell, sin reenvios. Autenticacion: SOLO clave publica del servicio MASTER (authorized_keys con from="<IP del MASTER>").
+# Fragmento sshd para el operador MASTER (lo instala instalar-todo.sh tras `sshd -t`). Solo SFTP enjaulado, sin shell ni reenvios.
+# Las claves autorizadas viven en un fichero de root (no en el chroot): /etc/fs-master/authorized_keys, una linea por clave:
+#   from="<IP del panel MASTER>",restrict ssh-ed25519 AAAA... panel-master
 Match User fs-master
     ChrootDirectory /var/lib/fs-master/sftp
     ForceCommand internal-sftp -u 0027
+    AuthorizedKeysFile /etc/fs-master/authorized_keys
     AuthenticationMethods publickey
     PasswordAuthentication no
     AllowTcpForwarding no

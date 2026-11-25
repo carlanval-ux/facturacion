@@ -242,7 +242,7 @@ function transition(string $state, string $action): array
 function plan(string $action): array
 {
     return match ($action) {
-        'provision' => ['preflight', 'bind', 'provision', 'bootstrap', 'deploy', 'company', 'entitlements', 'verify', 'admin'],
+        'provision' => ['preflight', 'bind', 'provision', 'bootstrap', 'deploy', 'company', 'email', 'entitlements', 'verify', 'admin'],
         'suspend' => ['suspend'], 'reactivate' => ['reactivate'], 'entitlements' => ['entitlements'],
         'status' => ['status'], 'preflight' => ['preflight'], 'deprovision-dry-run' => ['deprovision-dry-run'],
     };
@@ -264,4 +264,35 @@ function response(array $req, string $status, string $tenantState, array $steps,
         'tenant_state' => $tenantState, 'steps' => $steps, 'result' => $result, 'error' => $error,
         'completed_at' => gmdate('Y-m-d\TH:i:s\Z', $now ?: time()),
     ];
+}
+
+/** Plantilla de correo (grupo de ajustes `email` de FS) guardada en un fichero de root. Devuelve errores SIN incluir valores (pueden ser secretos). */
+function email_template_errors(?string $json): array
+{
+    if ($json === null || $json === '') {
+        return ['plantilla de correo ausente'];
+    }
+    $t = strlen($json) <= 4096 ? json_decode($json, true) : null;
+    if (!is_array($t) || array_is_list($t)) {
+        return ['plantilla de correo: JSON objeto de hasta 4 KiB'];
+    }
+    $e = [];
+    foreach (['email', 'host', 'password'] as $k) {
+        if (!is_string($t[$k] ?? null) || $t[$k] === '') {
+            $e[] = "plantilla de correo: falta $k";
+        }
+    }
+    foreach ($t as $k => $v) {
+        if (!is_string($k) || !preg_match('/\A[a-z_][a-z0-9_]{0,40}\z/i', $k) || !(is_scalar($v) || $v === null)) {
+            $e[] = 'plantilla de correo: claves y valores escalares simples';
+            break;
+        }
+    }
+    if (isset($t['host']) && is_string($t['host']) && !preg_match('/\A[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9])?\z/', $t['host'])) {
+        $e[] = 'plantilla de correo: host invalido';
+    }
+    if (isset($t['port']) && (!is_numeric($t['port']) || (int)$t['port'] < 1 || (int)$t['port'] > 65535)) {
+        $e[] = 'plantilla de correo: port invalido';
+    }
+    return $e;
 }
