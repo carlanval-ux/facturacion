@@ -20,9 +20,11 @@ done
 [[ "$(getent passwd fs-master | cut -d: -f7)" == /usr/sbin/nologin ]] && ok "fs-master sin shell" || ko "fs-master con shell"
 sshd -t && ok "sshd -t" || ko "sshd -t"
 EFF="$(sshd -T -C user=fs-master,host=x,addr=127.0.0.1 2>/dev/null)"
+if [[ -e /etc/ssh/sshd_config.d/fs-master.conf ]] || grep -q "^# fs-master-begin" /etc/ssh/sshd_config; then
 grep -qi '^chrootdirectory /var/lib/fs-master/sftp' <<<"$EFF" && ok "sshd: chroot SFTP para fs-master" || ko "sshd: no se aplica el Match de fs-master"
 OTHER="$(sshd -T -C user=ploi,host=x,addr=127.0.0.1 2>/dev/null)"
 grep -qi '^chrootdirectory none' <<<"$OTHER" && ok "sshd: ploi NO afectado por el Match" || ko "sshd: el Match afecta a otros usuarios"
+else info "sshd sin configurar para fs-master (opt-in CONFIGURAR_SSHD=1; pendiente hasta que exista el panel)"; fi
 if systemctl is-enabled fs-master-agent.timer >/dev/null 2>&1; then info "temporizador ACTIVADO"; else ok "temporizador sin activar (esperado antes del OK)"; fi
 info "claves SFTP autorizadas: $(grep -c . /etc/fs-master/authorized_keys 2>/dev/null || echo 0)"
 TAG="$(cat /etc/fs-master/default-release 2>/dev/null)"

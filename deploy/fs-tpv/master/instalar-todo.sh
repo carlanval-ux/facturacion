@@ -4,6 +4,7 @@
 # Si algo falla, deshace lo creado en ESTA ejecucion (y restaura sshd). Variables opcionales:
 #   RELEASE_TAG=fs-v2026.72-plug10     etiqueta de release por defecto
 #   RELEASE_FROM=<ruta a un fs-release.tar.gz>   lo publica como <RELEASE_TAG>.tar.gz(+.sha256) si aun no existe
+#   CONFIGURAR_SSHD=1   (OPT-IN) instala el fragmento sshd; exige que sshd -T de ploi y root no cambie, si no hace rollback sin recargar
 #   MASTER_PUBKEY='ssh-ed25519 AAAA... panel' [MASTER_IP=1.2.3.4]   clave publica SFTP del panel (se anade con restrict y from=)
 set -Eeuo pipefail
 [[ $EUID -eq 0 ]] || { echo "ejecutar como root" >&2; exit 1; }
@@ -67,7 +68,12 @@ if [[ -n "${MASTER_PUBKEY:-}" ]]; then
   grep -qxF "$LINE" "$AK" || printf '%s\n' "$LINE" >> "$AK"
 fi
 
-echo "[4/5] sshd: solo SFTP enjaulado para fs-master"
+echo "[4/5] sshd (OPT-IN: CONFIGURAR_SSHD=1)"
+if [[ "${CONFIGURAR_SSHD:-0}" != 1 ]]; then
+  echo "  OMITIDO: sshd no se toca (el panel MASTER aun no existe). Pendiente: repetir con CONFIGURAR_SSHD=1 cuando haya clave SFTP del panel."
+else
+snap() { sshd -T -C "user=$1,host=x,addr=127.0.0.1" | sort; }
+BASE_PLOI="$(snap ploi)"; BASE_ROOT="$(snap root)"   # garantia de no regresion: lo que sshd aplica a ploi y root no puede cambiar
 UNDO+=("sshd_reload")   # se registra primero: al deshacer corre el ultimo, despues de quitar el fragmento
 if grep -qE '^\s*Include\s+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config; then
   CONF=/etc/ssh/sshd_config.d/fs-master.conf
@@ -79,12 +85,15 @@ elif ! grep -q '^# fs-master-begin' /etc/ssh/sshd_config; then   # sin Include: 
   { echo '# fs-master-begin'; grep -v '^#' "$D/sshd-fs-master.conf.example"; echo '# fs-master-end'; } >> /etc/ssh/sshd_config
 fi
 sshd -t                                                                   # si falla: el trap restaura y NO se recarga
+[[ "$(snap ploi)" == "$BASE_PLOI" ]] || { echo "el fragmento cambia la configuracion efectiva de ploi: se deshace sin recargar" >&2; false; }
+[[ "$(snap root)" == "$BASE_ROOT" ]] || { echo "el fragmento cambia la configuracion efectiva de root: se deshace sin recargar" >&2; false; }
 EFF="$(sshd -T -C user=fs-master,host=x,addr=127.0.0.1 2>/dev/null || true)"
 grep -qi '^chrootdirectory /var/lib/fs-master/sftp' <<<"$EFF" || { echo "el Match de fs-master no se aplica" >&2; false; }
 OTHER="$(sshd -T -C user=ploi,host=x,addr=127.0.0.1 2>/dev/null || true)"
 grep -qi '^chrootdirectory none' <<<"$OTHER" || { echo "el Match afectaria a otros usuarios" >&2; false; }
 sshd_reload
 SSHD_BACKUP=""                                                            # ya validado y recargado
+fi
 
 echo "[5/5] release por defecto: $TAG"
 printf '%s\n' "$TAG" > /etc/fs-master/default-release; chmod 644 /etc/fs-master/default-release
