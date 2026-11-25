@@ -39,7 +39,8 @@ Panel MASTER (Teleco/Clarto)            rt-tpv-prod-01
     "id": "01JD00000000000000000000T1",
     "slug": "acme",
     "hostname": "acme.facturalo.redtelecom.app",
-    "trade_name": "Acme Gestión SL",
+    "trade_name": "Acme Gestión",
+    "legal_name": "ACME GESTION SOCIEDAD LIMITADA",
     "admin_email": "ana.lopez@acme.example",
     "company": { "cifnif": "B12345674", "direccion": "Calle Mayor 1", "ciudad": "Madrid",
                  "provincia": "Madrid", "codpostal": "28001", "email": "info@acme.example" }
@@ -62,6 +63,7 @@ Reglas (el agente rechaza todo lo demás, **campos desconocidos incluidos**):
 | `tenant.id` | ULID estable del MASTER; el slug queda ligado a él **para siempre** (`/etc/fs/tenants/<slug>.master.json`) |
 | `tenant.slug` | `^[a-z0-9][a-z0-9-]{0,26}[a-z0-9]$` (2-28), sin `--` (IDN), no reservado: `master www api admin mail smtp imap ftp ns1 ns2 app panel portal status staging test demo motor facturalo teleco clarto redtelecom tpv root localhost default cdn static assets dev prod backup dns vpn git ci support soporte billing ploi` ni prefijos `teleco-`/`fs-`. Inmutable. Mismo patrón que los scripts del host (así el slug nunca es una opción para `useradd`/`mysql`/nginx) |
 | `tenant.hostname` | exactamente `<slug>.facturalo.redtelecom.app` (sin dominios propios en v1) |
+| `legal_name` | solo `provision`, **obligatorio**: razón social CENSAL exacta (la que la AEAT valida contra el NIF; persona física: `APELLIDOS NOMBRE` como en el certificado). Solo mayúsculas (con acentos y Ñ), dígitos y `. , & ' / ( ) -`, sin espacios dobles ni minúsculas, ≤100. Se guarda en `Empresa.nombre`; el nombre comercial (`trade_name`) va solo en `nombrecorto` |
 | `trade_name`, `company.*`, `admin_email` | solo `provision`; texto sin caracteres de control, longitudes máximas; `company.{cifnif,direccion,ciudad,provincia,codpostal}` obligatorios; `admin_email` formato estricto |
 | `entitlements` | `provision` (opcional: si falta, **los 7 módulos a 0**) y `entitlements` (obligatorio): `serial` entero ≥ 1 y `modulos` con **exactamente** las 7 claves booleanas |
 | `release.tag` | solo `provision`; `[A-Za-z0-9._-]`, ≤64. Debe existir `/home/ploi/fs-releases/<tag>.tar.gz` + `.sha256` (subidos por `fs-deploy.yml`). Sin `tag` se usa `/etc/fs-master/default-release` |
@@ -117,7 +119,7 @@ Estado del tenant (en el registro del host `/etc/fs/tenants/<slug>.master.json`)
 3. `provision` — `fs-provision-tenant` (usuario, pool, BD y usuario MySQL mínimo, vhost, release inicial). Si ya existe, solo repone el enlace del vhost.
 4. `bootstrap` — `fs-bootstrap-tenant`: instala FS, **certbot por host (HTTP-01)**, activa `TelecoBridge`, `Facturalo` y los 7 plugins de módulo (`FS_EXTRA_PLUGINS`), crea el token de API mínimo.
 5. `deploy` — `fs-deploy-release` (mueve `config.php`/`MyFiles` a `shared`, activa la release, `Plugins::deploy`, salud; revierte solo si falla).
-6. `company` — sustituye la empresa ficticia del asistente por los datos reales (UPDATE parametrizado).
+6. `company` — sustituye la empresa ficticia del asistente por los datos reales (`nombre` = `legal_name`, `nombrecorto` = `trade_name`) (UPDATE parametrizado).
 7. `email` — copia el grupo de ajustes `email` de FS (SMTP noreply) desde la plantilla `/etc/fs-master/email-template.json` (root 600, JSON objeto con al menos `email`, `host`, `password`; nunca va en la petición, el repo ni los logs: el SQL se registra con parámetros ocultos), vacía `FileCache` (`tools-settings.cache` oculta el cambio), comprueba la misma condición que `NewMail::canSendMail()` (email, host y password no vacíos) y que el SMTP responde por TCP. **No envía correo real**: `/RecuperarClave` responde igual envíe o no, y mandaría un enlace al cliente. La plantilla se valida ya en `preflight` (`EMAIL_TEMPLATE_MISSING`/`EMAIL_TEMPLATE_INVALID`, antes de crear nada).
 8. `entitlements` — escribe los 7 `facturalo.modulos.*`.
 9. `verify` — `GET https://<host>/login` = 200.
@@ -143,7 +145,7 @@ Por qué:
 
 ## 8. Pruebas realizadas (de verdad) y límites
 
-`php deploy/fs-tpv/master/tests/run.php` → **136 comprobaciones, 0 fallos**, sin tocar red ni servidor (PHP 8.5 local, `SimHost` en memoria):
+`php deploy/fs-tpv/master/tests/run.php` → **157 comprobaciones, 0 fallos**, sin tocar red ni servidor (PHP 8.5 local, `SimHost` en memoria):
 
 - Slug: válidos, 13+ inválidos/reservados/inyección (`../x`, `a\nb`, `ab;rm`, `xn--`, `a--b`).
 - Firma: canónico, firma válida, dominio req/resp, kid desconocido, clave corta, documento manipulado, sin firma, `alg:none`.

@@ -59,7 +59,7 @@ function req(string $action, array $over = [], ?string $id = null): array
     unset($over['slug']);
     $tn = ['id' => '01JD00000000000000000000T1', 'slug' => $slug, 'hostname' => hostname_for($slug)];
     if ($action === 'provision') {
-        $tn += ['trade_name' => 'Acme Gestion SL', 'admin_email' => 'ana.lopez@acme.example', 'company' => ['cifnif' => 'B12345674', 'direccion' => 'Calle Mayor 1', 'ciudad' => 'Madrid', 'provincia' => 'Madrid', 'codpostal' => '28001']];
+        $tn += ['trade_name' => 'Acme Gestion', 'legal_name' => 'ACME GESTION SOCIEDAD LIMITADA', 'admin_email' => 'ana.lopez@acme.example', 'company' => ['cifnif' => 'B12345674', 'direccion' => 'Calle Mayor 1', 'ciudad' => 'Madrid', 'provincia' => 'Madrid', 'codpostal' => '28001']];
     }
     $r = ['version' => 1, 'request_id' => $id ?? $ULIDS[0], 'action' => $action, 'tenant' => $tn, 'requested_at' => gmdate('Y-m-d\TH:i:s\Z', T0), 'requested_by' => 'operador:ana'];
     if (in_array($action, ['provision', 'entitlements'], true)) {
@@ -325,6 +325,26 @@ $drop($d, req('provision'));
 $a->runOnce();
 $r = $resp($d, $ULIDS[0]);
 ok($r['error']['code'] === 'EMAIL_SMTP_UNREACHABLE' && $r['error']['retryable'] === true, 'SMTP inalcanzable: reintentable');
+
+
+// ---------- razon social censal ----------
+foreach (['ACME GESTION SOCIEDAD LIMITADA', 'LANDAETA VALDIVIA CARLOS MIGUEL', 'MUÑOZ PEÑA, JOSÉ & HIJOS S.L.', 'ÁLVAREZ-NÚÑEZ 2000 SA', 'CLARTO'] as $n) {
+    ok(legal_name_error($n) === null, "razon social valida: $n");
+}
+foreach (['', 'Clarto', 'Landaeta Valdivia Carlos', 'ACME  SL', ' ACME SL', 'ACME SL ', '-ACME', 'ACME <SL>', "ACME\nSL", 'ACME;DROP', str_repeat('A', 101)] as $n) {
+    ok(legal_name_error($n) !== null, 'razon social rechazada ' . json_encode($n));
+}
+ok(legal_name_error(null) !== null, 'razon social obligatoria');
+$r = req('provision');
+unset($r['tenant']['legal_name']);
+ok($v($r) !== [], 'provision sin legal_name: rechazado');
+ok($v(req('provision', ['tenant' => ['legal_name' => 'Clarto']])) !== [], 'provision con nombre comercial en minusculas como legal_name: rechazado');
+ok($v(req('suspend', ['tenant' => ['legal_name' => 'ACME SL']])) !== [], 'legal_name fuera de provision: rechazado');
+[$d, $h, $a] = $mk();
+$drop($d, req('provision'));
+$a->runOnce();
+$u = array_values(array_filter($h->log, fn($l) => str_contains($l, 'UPDATE empresas')))[0] ?? '';
+ok(str_contains($u, '["ACME GESTION SOCIEDAD LIMITADA","Acme Gestion"'), 'Empresa.nombre = razon social censal; nombrecorto = nombre comercial', $u);
 
 echo "\n$total comprobaciones, $fail fallos\n";
 exit($fail ? 1 : 0);
