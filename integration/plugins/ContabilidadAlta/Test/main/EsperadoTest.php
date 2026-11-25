@@ -56,6 +56,12 @@ final class EsperadoTest extends TestCase
         $this->assertSame(['a', 'b', 'd', 'f'], array_column($dif, 'clave')); // f ausente ≠ 0
     }
 
+    public function testPartirAdmitePuntosEnElCodigo(): void
+    {
+        $this->assertSame(['impuesto', 'IGIC13.5', 'activo'], Esperado::partir('impuesto.IGIC13.5.activo'));
+        $this->assertSame(['ajuste', 'default', 'decimals'], Esperado::partir('ajuste.default.decimals'));
+    }
+
     public function testPlanFaltas(): void
     {
         $filas = [['4', 'Acreedores', ''], ['47', 'Hacienda', ''], ['472', 'IVA soportado', 'IVASOP'], ['4720000000', 'IVA', ''], ['4770000000', 'IVA rep', '']];

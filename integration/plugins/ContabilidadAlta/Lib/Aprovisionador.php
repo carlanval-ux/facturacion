@@ -131,7 +131,7 @@ final class Aprovisionador
     {
         $porCodigo = [];
         foreach (Esperado::plano($this->long, $this->anyo, $this->impuestosAbolidos()) as $k => $v) {
-            $p = explode('.', $k);
+            $p = Esperado::partir($k);
             if ('impuesto' === $p[0]) {
                 $porCodigo[$p[1]][$p[2]] = $v;
             }
@@ -270,7 +270,7 @@ final class Aprovisionador
         }
         $modelos = ['impuesto' => Impuesto::class, 'retencion' => Retencion::class, 'serie' => Serie::class];
         foreach (array_keys($esperado) as $k) {
-            $p = explode('.', $k);
+            $p = Esperado::partir($k);
             if (isset($modelos[$p[0]])) {
                 $m = new $modelos[$p[0]]();
                 if ($m->load($p[1])) {

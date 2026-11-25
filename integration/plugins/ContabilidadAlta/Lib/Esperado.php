@@ -95,6 +95,14 @@ final class Esperado
         return ['cuentas_faltantes' => $cf, 'subcuentas_faltantes' => $sf, 'cuentaesp_distintas' => $ed];
     }
 
+    /** `area.clave.campo` → [area, clave, campo]; la clave puede llevar puntos (IGIC13.5). */
+    public static function partir(string $k): array
+    {
+        $a = strpos($k, '.');
+        $c = strrpos($k, '.');
+        return [substr($k, 0, $a), substr($k, $a + 1, $c - $a - 1), substr($k, $c + 1)];
+    }
+
     /** @return array<int,array{clave:string,esperado:mixed,actual:mixed}> diferencias (vacío = conforme). */
     public static function comparar(array $esperado, array $actual): array
     {
