@@ -7,8 +7,11 @@ set -Eeuo pipefail
 SLUG="${1:?slug}"; [[ "$SLUG" =~ ^[a-z0-9]([a-z0-9-]{0,26}[a-z0-9])$ ]] || { echo slug invalido >&2; exit 1; }
 CONF="/etc/fs/tenants/$SLUG.conf"; SEC="/etc/fs/tenants/$SLUG.secrets"; BASE="/srv/fs/$SLUG"; DB="fs_${SLUG//-/_}"
 DOMAIN="$(grep -m1 -oE 'server_name [^;]+' "/etc/nginx/sites-available/fs-$SLUG.conf" | cut -d' ' -f2)"
-DBPASS="$(sed -n 's/^DB_PASS=//p' "$CONF")"; B="http://127.0.0.1"; CJ="$(mktemp)"; trap 'rm -f "$CJ"' EXIT
-c() { curl -s -m 900 -H "Host: $DOMAIN" -c "$CJ" -b "$CJ" "$@"; }
+DBPASS="$(sed -n 's/^DB_PASS=//p' "$CONF")"; CJ="$(mktemp)"; trap 'rm -f "$CJ"' EXIT
+trap 'echo "[fs-bootstrap-tenant] fallo en la linea $LINENO (codigo $?)" >&2' ERR     # antes salia con 1 sin decir nada
+# Con TLS ya emitido certbot deja el puerto 80 en un 301: se entra por HTTPS local (reejecutable); sin TLS, por HTTP plano.
+if [[ -d "/etc/letsencrypt/live/fs-$SLUG" ]]; then B="https://$DOMAIN"; RES=(-k --resolve "$DOMAIN:443:127.0.0.1"); else B="http://127.0.0.1"; RES=(); fi
+c() { curl -s -m 900 "${RES[@]}" -H "Host: $DOMAIN" -c "$CJ" -b "$CJ" "$@"; }
 tok() { grep -oE 'multireqtoken(=|" value=")[^"&]+' | head -1 | sed -E 's/.*(=|value=")//'; }
 if [[ ! -f "$SEC" ]]; then ( umask 077; printf 'FS_ADMIN=admin\nFS_ADMIN_PASS=%s\nFS_API_KEY=%s\n' "$(openssl rand -hex 16)" "$(openssl rand -hex 24)" > "$SEC" ); fi
 . "$SEC"

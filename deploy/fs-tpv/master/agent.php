@@ -41,13 +41,13 @@ final class RealHost implements Host
             }
             if (time() > $end) {
                 proc_terminate($p, 15);
-                return [124, substr($out, -2000) . "\n[timeout]"];
+                return [124, substr($out, -65536) . "\n[timeout]"];
             }
             usleep(200000);
         }
         $out .= (string)stream_get_contents($pipes[1]);
         proc_close($p);
-        return [(int)$st['exitcode'], substr($out, -4000)];
+        return [(int)$st['exitcode'], substr($out, -65536)];   // salida completa (cola de 64 KB); se recorta/redacta al informar
     }
 
     public function exists(string $path): bool { return file_exists($path) || is_link($path); }
@@ -56,6 +56,7 @@ final class RealHost implements Host
 
     public function write(string $path, string $data, int $mode = 0600): void
     {
+        @mkdir(dirname($path), 0700, true);
         $tmp = $path . '.tmp' . getmypid();
         file_put_contents($tmp, $data);
         chmod($tmp, $mode);
@@ -76,11 +77,14 @@ final class RealHost implements Host
 }
 
 /** Host simulado: memoria + registro de lo que se HARIA. $scripted: prefijo de comando => [codigo, salida] (para forzar fallos). */
-final class SimHost implements Host
+class SimHost implements Host
 {
     public array $log = [];
     public array $files = [];
     public array $scripted = [];
+    public array $scriptedSeq = [];         // prefijo => [resultados consumidos uno a uno]; agotada la lista, comportamiento normal
+    public array $installed = [];           // BD => FS instalado (api_keys con teleco-bridge)
+    public array $pluginsOn = [];
     public array $dns = [];
     public array $sqlRows = [];
     public array $ejercicios = [['codejercicio' => '2026', 'fechainicio' => '2026-01-01', 'fechafin' => '2026-12-31', 'longsubcuenta' => 10]];
@@ -91,6 +95,15 @@ final class SimHost implements Host
     {
         $line = implode(' ', array_map(fn($a) => preg_match('/\A[\w@%+=:,.\/-]+\z/', $a) ? $a : "'$a'", $argv)) . ($env ? ' [env ' . implode(',', array_keys($env)) . ']' : '');
         $this->log[] = 'exec ' . $line;
+        foreach ($this->scriptedSeq as $prefix => $seq) {
+            if ($seq && str_starts_with($line, $prefix)) {
+                $res = array_shift($this->scriptedSeq[$prefix]);
+                if ($res[0] === 0) {
+                    $this->simulate($argv, $env);
+                }
+                return $res;
+            }
+        }
         foreach ($this->scripted as $prefix => $res) {
             if (str_starts_with($line, $prefix)) {
                 return $res;
@@ -99,15 +112,32 @@ final class SimHost implements Host
         if ($argv[0] === 'curl') {
             return [0, '200'];
         }
-        // efectos que el resto del plan observa en un host real
+        $this->simulate($argv, $env);
+        return [0, 'ok (simulado)'];
+    }
+
+    /** Efectos que el resto del plan observa en un host real. */
+    private function simulate(array $argv, array $env): void
+    {
         if (str_ends_with($argv[0], 'fs-provision-tenant')) {
             $this->files["/srv/fs/{$argv[1]}/current"] = 'release';
             $this->files["/etc/nginx/sites-available/fs-{$argv[1]}.conf"] = "server {\n    listen 80;\n    server_name {$argv[2]};\n}\n";
         }
         if (str_ends_with($argv[0], 'fs-bootstrap-tenant')) {
-            $this->files["/etc/fs/tenants/{$argv[1]}.secrets"] = 'FS_ADMIN=admin';
+            $this->files["/etc/fs/tenants/{$argv[1]}.secrets"] = "FS_ADMIN=admin\nFS_ADMIN_PASS=ClaveAdminSecreta1\nFS_API_KEY=ApiKeySecreta1234\n";
+            $this->installed['fs_' . str_replace('-', '_', $argv[1])] = true;
+            $this->files["/etc/letsencrypt/live/fs-{$argv[1]}"] = 'cert';
+            $this->setPlugins($argv[1], array_merge(['TelecoBridge', 'Facturalo'], preg_split('/\s+/', trim($env['FS_EXTRA_PLUGINS'] ?? '')) ?: []));
         }
-        return [0, 'ok (simulado)'];
+        if (str_ends_with($argv[0], 'fs-enable-plugins')) {
+            $this->setPlugins($argv[1], array_merge($this->pluginsOn[$argv[1]] ?? [], array_slice($argv, 2)));
+        }
+    }
+
+    public function setPlugins(string $slug, array $names): void
+    {
+        $this->pluginsOn[$slug] = array_values(array_unique(array_filter($names)));
+        $this->files["/srv/fs/$slug/shared/MyFiles/plugins.json"] = json_encode(array_map(fn($n) => ['name' => $n, 'enabled' => true, 'order' => 100], $this->pluginsOn[$slug]));
     }
 
     public function exists(string $path): bool { return isset($this->files[$path]); }
@@ -127,6 +157,9 @@ final class SimHost implements Host
         if (str_contains($sql, "EXISTS (SELECT 1 FROM cuentas")) {
             return $this->planBase;
         }
+        if (str_contains($sql, 'FROM api_keys')) {
+            return [['n' => !empty($this->installed[$db]) ? 1 : 0]];
+        }
         if (str_contains($sql, "FROM settings WHERE name = 'email'")) {
             return $this->emailRow;
         }
@@ -138,13 +171,18 @@ final class SimHost implements Host
 
 final class StepFailed extends \RuntimeException
 {
-    public function __construct(public readonly string $codigo, string $msg, public readonly bool $reintentable = false) { parent::__construct($msg); }
+    public function __construct(public readonly string $codigo, string $msg, public readonly bool $reintentable = false, public readonly string $output = '') { parent::__construct($msg); }
 }
 
 final class Agent
 {
     /** @param array<string,mixed> $c Configuracion (ver CONF_DEFAULTS) */
-    public function __construct(private array $c, private Host $h, private \Closure $clock) {}
+    private \Closure $sleep;
+
+    public function __construct(private array $c, private Host $h, private \Closure $clock, ?\Closure $sleep = null)
+    {
+        $this->sleep = $sleep ?? fn(int $s) => sleep($s);
+    }
 
     public const CONF_DEFAULTS = [
         'queue' => '/var/lib/fs-master/sftp',           // requests/ y responses/ (chroot SFTP del operador MASTER)
@@ -158,6 +196,10 @@ final class Agent
         'protected' => ['redtelecom', 'teleco-test', 'carlos'], // nunca se tocan (existian antes del agente)
         'sbin' => '/usr/local/sbin',
         'plugins_base' => ['Facturalo', 'TelecoBridge'],
+        // Plugins gratuitos y propios que lleva TODO tenant nuevo (ademas de plugins_base y los 7 de modulo). Ausente en la release = aviso, no fallo.
+        'plugins_extra' => ['PersonalizarEmail', 'AutoEnvioFacturas', 'PdfFileNamer', 'FacturaZip', 'Informes', 'MuestraAdjuntoEmail', 'FiltroEjercicioActual', 'ValidaNIF', 'VisorErrores', 'MisInstalaciones', 'ContabilidadAlta', 'VerifactuFacturalo'],
+        'log_dir' => '/var/log/fs-master',              // salida completa (sin secretos) de los scripts que fallan: <request_id>-<paso>.log
+        'bootstrap_wait' => 60, 'bootstrap_attempts' => 3, 'bootstrap_backoff' => [10, 30],
     ];
 
     private function now(): int { return ($this->clock)(); }
@@ -269,10 +311,21 @@ final class Agent
                 $result += $res['result'] ?? [];
             }
         } catch (StepFailed $e) {
-            $steps[] = ['name' => $name, 'status' => 'failed', 'ms' => (int)((microtime(true) - $t0) * 1000), 'detail' => $e->getMessage()];
-            $rb = $action === 'provision' ? $this->rollback($ctx, $done) : 'nada que deshacer';
-            $this->finish($file, $id, $req, 'failed', $action === 'provision' ? 'error' : $state, $steps, ['rollback' => $rb],
-                ['step' => $name, 'code' => $e->codigo, 'message' => $e->getMessage(), 'retryable' => $e->reintentable]);
+            $secrets = $this->secretsOf($slug);
+            $msg = redact($e->getMessage(), $secrets, 1000);
+            $err = ['step' => $name, 'code' => $e->codigo, 'message' => $msg, 'retryable' => $e->reintentable];
+            if ($e->output !== '') {                        // salida completa del script: cola en la respuesta, completa en el log del host
+                $err['output'] = redact($e->output, $secrets, 4000);
+                $log = $this->d('log_dir') . "/$id-$name.log";
+                try {
+                    $this->h->write($log, '# ' . gmdate('Y-m-d\TH:i:s\Z', $this->now()) . " $slug paso $name ({$e->codigo})\n" . redact($e->output, $secrets, 65536) . "\n", 0600);
+                    $err['log'] = $log;
+                } catch (\Throwable) {                      // un log que no se puede escribir no debe impedir la respuesta
+                }
+            }
+            $steps[] = ['name' => $name, 'status' => 'failed', 'ms' => (int)((microtime(true) - $t0) * 1000), 'detail' => $msg];
+            $rb = $action === 'provision' ? $this->rollback($ctx, $done, $name, $e->codigo, $id) : 'nada que deshacer';
+            $this->finish($file, $id, $req, 'failed', $action === 'provision' ? 'error' : $state, $steps, ['rollback' => $rb], $err);
             return;
         }
         $next = $t['next'];
@@ -316,9 +369,9 @@ final class Agent
                 $this->must($h->exec(["$sbin/fs-provision-tenant", $slug, $x['host'], $tar()]), 'PROVISION_FAILED');
                 return ['detail' => 'usuario, pool, BD y vhost creados'];
             case 'bootstrap':
-                $pl = array_merge($this->c['plugins_base'], array_values(MODULE_PLUGINS));
-                $this->must($h->exec(["$sbin/fs-bootstrap-tenant", $slug], ['FS_EXTRA_PLUGINS' => implode(' ', array_slice($pl, 2))]), 'BOOTSTRAP_FAILED');
-                return ['detail' => 'FS instalado, TLS y plugins activados'];
+                return $this->bootstrap($x);
+            case 'plugins':
+                return $this->applyPlugins($x);
             case 'deploy':
                 $this->must($h->exec(["$sbin/fs-deploy-release", $slug, $tar()]), 'DEPLOY_FAILED');
                 return ['detail' => 'release activa'];
@@ -360,11 +413,118 @@ final class Agent
         throw new StepFailed('UNKNOWN_STEP', $name);
     }
 
-    private function must(array $r, string $code): void
+    private function must(array $r, string $code, bool $retry = false): void
     {
         if ($r[0] !== 0) {
-            throw new StepFailed($code, 'salida ' . $r[0] . ': ' . trim(substr($r[1], -600)));
+            $o = trim($r[1]);
+            throw new StepFailed($code, 'salida ' . $r[0] . ': ' . ($o === '' ? '(el script no escribio nada)' : substr($o, -300)), $retry, $r[1]);
         }
+    }
+
+    /** Valores secretos del tenant (para no filtrarlos en salidas ni logs). */
+    private function secretsOf(string $slug): array
+    {
+        $v = [];
+        foreach (['secrets', 'conf'] as $ext) {
+            foreach (explode("\n", (string)$this->h->read($this->d('tenants') . "/$slug.$ext")) as $l) {
+                if (preg_match('/^[A-Z_]*(PASS|KEY|TOKEN|SECRET)[A-Z_]*=(.+)$/', trim($l), $m)) {
+                    $v[] = trim($m[2], "\"'");
+                }
+            }
+        }
+        return $v;
+    }
+
+    /** FS instalado = existe la clave de API teleco-bridge (lo ultimo que escribe el wrapper, tras instalar FS y activar plugins). Devuelve el motivo o null. */
+    private function installedWhy(array $x): ?string
+    {
+        try {
+            $r = $this->h->sql($x['db'], "SELECT COUNT(*) AS n FROM api_keys WHERE description = 'teleco-bridge'");
+        } catch (\Throwable) {                              // BD a medias: la tabla aun no existe
+            return null;
+        }
+        return (int)($r[0]['n'] ?? 0) > 0 ? 'api_keys teleco-bridge presente' : null;
+    }
+
+    /** Sondeo de http://127.0.0.1/ con Host hasta que nginx y PHP-FPM respondan (<500). */
+    private function waitReady(array $x): bool
+    {
+        $end = $this->now() + (int)$this->c['bootstrap_wait'];
+        while (true) {
+            [, $o] = $this->h->exec(['curl', '-s', '-o', '/dev/null', '-m', '10', '-w', '%{http_code}', '-H', "Host: {$x['host']}", 'http://127.0.0.1/']);
+            $code = (int)trim($o);
+            if ($code >= 200 && $code < 500) {
+                return true;
+            }
+            if ($this->now() >= $end) {
+                return false;
+            }
+            ($this->sleep)(3);
+        }
+    }
+
+    /** Idempotente: con FS ya instalado NO se llama al wrapper (con TLS aplicado certbot deja el puerto 80 en un 301 que el wrapper no sigue y sale con 1 sin mensaje). */
+    private function bootstrap(array $x): array
+    {
+        $slug = $x['slug'];
+        $sbin = $this->d('sbin');
+        $tls = $this->h->exists("/etc/letsencrypt/live/fs-$slug");
+        if ($why = $this->installedWhy($x)) {
+            if (!$tls) {                                   // instalado pero el certbot del wrapper no llego a emitir (solo avisa)
+                $this->must($this->h->exec(['certbot', '--nginx', '-d', $x['host'], '--cert-name', "fs-$slug", '--non-interactive', '--agree-tos', '--register-unsafely-without-email', '--redirect']), 'TLS_FAILED', true);
+            }
+            return ['detail' => "ya instalado ($why); " . ($tls ? 'TLS ya aplicado' : 'TLS emitido ahora') . ': no se llama a fs-bootstrap-tenant'];
+        }
+        if ($tls) {
+            throw new StepFailed('BOOTSTRAP_INCONSISTENT', "hay certificado TLS fs-$slug pero FS no figura instalado (sin api_keys teleco-bridge): fs-bootstrap-tenant no es reejecutable con TLS; revisar a mano");
+        }
+        $pl = array_values(array_unique(array_merge(array_values(MODULE_PLUGINS), $this->c['plugins_extra'])));
+        $outs = [];
+        $n = (int)$this->c['bootstrap_attempts'];
+        for ($i = 1; $i <= $n; $i++) {
+            if (!$this->waitReady($x)) {
+                throw new StepFailed('BOOTSTRAP_NOT_READY', "http://127.0.0.1/ con Host {$x['host']} no responde en {$this->c['bootstrap_wait']} s (intento $i/$n)", true, implode("\n", $outs));
+            }
+            [$c, $o] = $this->h->exec(["$sbin/fs-bootstrap-tenant", $slug], ['FS_EXTRA_PLUGINS' => implode(' ', $pl)]);
+            $outs[] = "=== intento $i/$n: salida $c ===\n" . trim($o);
+            if ($c === 0) {
+                return ['detail' => "FS instalado, TLS y plugins activados (intento $i/$n)"];
+            }
+            if ($this->installedWhy($x)) {                 // fallo en el tramo final (certbot/copia): la instalacion esta hecha y no se repite
+                return ['detail' => "el wrapper salio $c pero FS quedo instalado (intento $i/$n); ultima salida: " . substr(trim($o), -200)];
+            }
+            if ($i < $n) {
+                ($this->sleep)((int)($this->c['bootstrap_backoff'][$i - 1] ?? 30));
+            }
+        }
+        $t = trim($o);
+        throw new StepFailed('BOOTSTRAP_FAILED', "fs-bootstrap-tenant fallo $n veces; ultima salida $c: " . ($t === '' ? '(el script no escribio nada)' : substr($t, -300)), true, implode("\n", $outs));
+    }
+
+    /** Activa los plugins que falten (base + 7 de modulo + extras) sin depender del HTTP plano del wrapper; idempotente. */
+    private function applyPlugins(array $x): array
+    {
+        $slug = $x['slug'];
+        $required = array_merge($this->c['plugins_base'], array_values(MODULE_PLUGINS));
+        $want = array_values(array_unique(array_merge($required, $this->c['plugins_extra'])));
+        $cur = $this->d('base') . "/$slug/current/Plugins";
+        $present = array_values(array_filter($want, fn($p) => $this->h->exists("$cur/$p")));
+        $missing = array_values(array_diff($want, $present));
+        if ($req = array_intersect($missing, $required)) {
+            throw new StepFailed('PLUGIN_MISSING', 'faltan en la release plugins obligatorios: ' . implode(',', $req));
+        }
+        $pj = $this->d('base') . "/$slug/shared/MyFiles/plugins.json";
+        $todo = array_values(array_diff($present, enabled_plugins($this->h->read($pj))));
+        if ($todo) {
+            $this->must($this->h->exec([$this->d('sbin') . '/fs-enable-plugins', $slug, ...$todo]), 'PLUGINS_FAILED');
+            $left = array_values(array_diff($todo, enabled_plugins($this->h->read($pj))));
+            if ($left) {
+                throw new StepFailed('PLUGINS_NOT_ENABLED', 'no quedaron activados (dependencias o error de FS): ' . implode(',', $left));
+            }
+            $this->clearCache($slug);
+        }
+        return ['detail' => (count($present) - count($todo)) . ' ya activos, ' . count($todo) . ' activados ahora' . ($missing ? '; ausentes en la release (opcionales): ' . implode(',', $missing) : ''),
+            'result' => ['plugins' => ['activados_ahora' => $todo, 'ausentes_opcionales' => $missing]]];
     }
 
     private function artifact(array $req): string
@@ -510,17 +670,21 @@ final class Agent
     }
 
     /** Deshacer SOLO lo reversible: el tenant a medias deja de servirse y queda en 'error'. Nunca se borran datos ni BD. */
-    private function rollback(array $x, array $done): string
+    private function rollback(array $x, array $done, string $failed = '', string $code = '', string $id = ''): string
     {
         $slug = $x['slug'];
         $acts = [];
-        if (isset($done['provision'])) {
+        // El vhost solo se quita si falla el propio aprovisionamiento (aun no hay FS que servir). Desde bootstrap hay instalacion parcial
+        // (BD, secretos, a veces TLS): quitarlo la dejaria inalcanzable y el reintento (waitReady, verify) lo necesita activo.
+        if ($failed === 'provision' && isset($done['bind'])) {
             $this->h->remove("/etc/nginx/sites-enabled/fs-$slug.conf");
             $this->h->exec(['systemctl', 'reload', 'nginx']);
             $acts[] = 'vhost deshabilitado';
+        } elseif (isset($done['provision'])) {
+            $acts[] = 'vhost conservado (instalacion parcial: BD, secretos y TLS no se tocan)';
         }
         if (isset($done['bind'])) {
-            $this->setBind($slug, ['state' => 'error']);
+            $this->setBind($slug, ['state' => 'error', 'last_error' => ['request_id' => $id, 'step' => $failed, 'code' => $code, 'at' => gmdate('Y-m-d\TH:i:s\Z', $this->now())]]);
             $acts[] = 'estado=error (datos conservados; reintentar con un request_id nuevo reanuda)';
         }
         return implode('; ', $acts);
@@ -637,7 +801,7 @@ if (PHP_SAPI === 'cli' && isset($argv[0]) && realpath($argv[0]) === __FILE__) {
         $host = new SimHost();
         $host->dns = [];
         $conf = array_merge($conf, ['queue' => $o['queue'], 'work' => $o['queue'] . '/.work', 'keys' => $o['keys']]);
-        $agent = new Agent($conf, $host, fn() => time());
+        $agent = new Agent($conf, $host, fn() => time(), fn(int $s) => null);
         $n = $agent->runOnce();
         echo "peticiones atendidas: $n\n" . implode("\n", $host->log) . "\n";
         exit(0);

@@ -245,7 +245,7 @@ function transition(string $state, string $action): array
 function plan(string $action): array
 {
     return match ($action) {
-        'provision' => ['preflight', 'bind', 'provision', 'bootstrap', 'deploy', 'company', 'ejercicio', 'email', 'entitlements', 'verify', 'admin'],
+        'provision' => ['preflight', 'bind', 'provision', 'bootstrap', 'deploy', 'plugins', 'company', 'ejercicio', 'email', 'entitlements', 'verify', 'admin'],
         'suspend' => ['suspend'], 'ejercicio' => ['ejercicio'], 'reactivate' => ['reactivate'], 'entitlements' => ['entitlements'],
         'status' => ['status'], 'preflight' => ['preflight'], 'deprovision-dry-run' => ['deprovision-dry-run'],
     };
@@ -354,6 +354,35 @@ function exercises_to_create(array $existing, int $year, int $count = 2): array
         }
         $codes[$code] = true;
         $out['crear'][] = ['codejercicio' => $code, 'nombre' => (string)$y, 'fechainicio' => $ini, 'fechafin' => $fin, 'longsubcuenta' => $long];
+    }
+    return $out;
+}
+
+/** Quita secretos conocidos y patrones clave=valor sensibles, elimina control/UTF-8 invalido y deja solo los ULTIMOS $max bytes (el fallo suele estar al final). */
+function redact(string $s, array $secrets = [], int $max = 4000): string
+{
+    foreach ($secrets as $v) {
+        if (is_string($v) && strlen($v) >= 6) {
+            $s = str_replace($v, '***', $s);
+        }
+    }
+    $s = (string)preg_replace('/(pass(?:word)?|apikey|api_key|token|secret|multireqtoken)(["\']?\s*[=:]\s*["\']?)[^\s"\'&<>]+/i', '$1$2***', $s);
+    $s = (string)preg_replace('/[\x00-\x08\x0B-\x1F\x7F]/', '', $s);
+    if (strlen($s) > $max) {
+        $s = '[...truncado...]' . substr($s, -$max);
+    }
+    return preg_match('//u', $s) ? $s : (string)preg_replace('/[^\x09\x0A\x20-\x7E]/', '?', $s);
+}
+
+/** Nombres de plugins activados segun MyFiles/plugins.json de FS (lista de {name, enabled, order}). */
+function enabled_plugins(?string $json): array
+{
+    $d = $json === null ? null : json_decode($json, true);
+    $out = [];
+    foreach (is_array($d) ? $d : [] as $it) {
+        if (is_array($it) && is_string($it['name'] ?? null) && !empty($it['enabled'])) {
+            $out[] = $it['name'];
+        }
     }
     return $out;
 }

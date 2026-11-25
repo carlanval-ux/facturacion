@@ -12,7 +12,7 @@ D="$(cd "$(dirname "$0")" && pwd)"
 TAG="${RELEASE_TAG:-fs-v2026.72-plug10}"
 [[ "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || { echo "RELEASE_TAG invalido" >&2; exit 1; }
 REL=/home/ploi/fs-releases
-for f in lib.php agent.php agent.json.example sshd-fs-master.conf.example systemd/fs-master-agent.service systemd/fs-master-agent.timer; do
+for f in lib.php agent.php agent.json.example sshd-fs-master.conf.example systemd/fs-master-agent.service systemd/fs-master-agent.timer ../fs-enable-plugins.sh; do
   [[ -f "$D/$f" ]] || { echo "falta $D/$f" >&2; exit 1; }
 done
 for c in php sshd openssl systemctl; do command -v "$c" >/dev/null || { echo "falta $c" >&2; exit 1; }; done
@@ -39,15 +39,18 @@ sshd_reload() { systemctl reload ssh 2>/dev/null || systemctl reload sshd; }
 echo "[1/5] usuario y colas"
 getent group fs-master >/dev/null || { groupadd --system fs-master; UNDO+=("groupdel fs-master"); }
 id fs-master >/dev/null 2>&1 || { useradd --system --gid fs-master --home /var/lib/fs-master/sftp --shell /usr/sbin/nologin fs-master; UNDO+=("userdel fs-master"); }
-mk /var/lib/fs-master; mk /etc/fs-master; mk /opt/fs-master; mk /etc/fs/suspend
+mk /var/lib/fs-master; mk /etc/fs-master; mk /opt/fs-master; mk /etc/fs/suspend; mk /var/log/fs-master
 install -d -m 700 /var/lib/fs-master /etc/fs-master /etc/fs-master/keys
 install -d -m 755 -o root -g root /var/lib/fs-master/sftp                   # raiz del chroot: root:root, sin escritura de grupo
 install -d -m 3770 -o root -g fs-master /var/lib/fs-master/sftp/requests    # el MASTER escribe peticiones
 install -d -m 750 -o root -g fs-master /var/lib/fs-master/sftp/responses    # el MASTER lee respuestas
 install -d -m 755 /etc/fs /etc/fs/suspend /opt/fs-master
+install -d -m 700 /var/log/fs-master                                         # salida completa (sin secretos) de los scripts que fallan
 
 echo "[2/5] agente y unidades (temporizador SIN activar)"
 for f in lib.php agent.php; do mk "/opt/fs-master/$f"; install -m 644 "$D/$f" "/opt/fs-master/$f"; done
+[[ -e /usr/local/sbin/fs-enable-plugins ]] || UNDO+=("rm -f /usr/local/sbin/fs-enable-plugins")
+install -m 750 -o root -g root "$D/../fs-enable-plugins.sh" /usr/local/sbin/fs-enable-plugins   # paso `plugins`: activa plugins por HTTPS local
 if [[ ! -f /etc/fs-master/agent.json ]]; then install -m 600 "$D/agent.json.example" /etc/fs-master/agent.json; UNDO+=("rm -f /etc/fs-master/agent.json"); fi
 for u in fs-master-agent.service fs-master-agent.timer; do
   [[ -e /etc/systemd/system/$u ]] || UNDO+=("rm -f /etc/systemd/system/$u")
