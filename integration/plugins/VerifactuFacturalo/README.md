@@ -23,7 +23,7 @@ Certificado (nombre), Vencimiento, check **Modo pruebas**, check «Certificado d
 Sin cambios de código ni de esquema. Salvaguardas: `Transporte` revalida el destino contra el check antes de abrir el socket; cada registro lleva su `entorno` y **solo se envía al entorno en el que se creó** (un pendiente de pruebas no sale a real); al cambiar el check la cadena empieza de nuevo (`PrimerRegistro`) y `desde` se reinicia a hoy, de modo que no se registran en real las facturas anteriores al cambio. Las facturas ya registradas en pruebas quedan fuera de la AEAT real: es el comportamiento esperado al pasar a real.
 
 ## Ajustes opcionales (`Tools::settings('verifactufacturalo', ...)`)
-`sif_nombre` / `sif_nif`: identidad del productor del software (bloque `SistemaInformatico`). Si falta `sif_nif` se usa el NIF del emisor: **para producción debe ser el NIF de RED TELECOM**.
+`sif_nombre` / `sif_nif`: identidad del productor del software (bloque `SistemaInformatico`). Por defecto: RED TELECOM CONECTA, S.L. (B19918630); la AEAT valida NIF+nombre contra el censo, así que no pongas el NIF de otro con ese nombre.
 
 ## Tests (`Test/main`)
 - `HuellaTest`: los 3 vectores del documento de la AEAT (primer registro, encadenado, anulación).

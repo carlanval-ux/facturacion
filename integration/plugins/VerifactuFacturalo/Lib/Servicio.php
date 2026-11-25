@@ -364,8 +364,8 @@ class Servicio
     public static function sistema(array $emisor, int $idempresa): array
     {
         return [
-            'nombre' => (string)(Tools::settings(self::GRUPO, 'sif_nombre') ?: 'RED TELECOM'),
-            'nif' => (string)(Tools::settings(self::GRUPO, 'sif_nif') ?: $emisor['nif']),
+            'nombre' => (string)(Tools::settings(self::GRUPO, 'sif_nombre') ?: 'RED TELECOM CONECTA, S.L.'),
+            'nif' => (string)(Tools::settings(self::GRUPO, 'sif_nif') ?: 'B19918630'), // productor del software: RED TELECOM CONECTA, S.L. (la AEAT valida NIF+nombre contra el censo)
             'id' => 'FV',
             'version' => '0.1',
             'instalacion' => (string)$idempresa,
