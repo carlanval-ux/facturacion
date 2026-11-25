@@ -1,0 +1,18 @@
+[Unit]
+Description=Agente MASTER de Facturalo (procesa la cola de altas/bajas de tenants FS)
+After=network-online.target mysql.service nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/php /opt/fs-master/agent.php --conf=/etc/fs-master/agent.json
+# Root es inevitable (useradd, pools, nginx, mysql root); se recorta lo demas. Validar con `systemd-analyze security fs-master-agent`
+# y con una peticion `status` ANTES de activar el temporizador. NoNewPrivileges no se pone: los scripts usan `sudo -u <tenant>`.
+PrivateTmp=yes
+ProtectHome=read-only
+ReadWritePaths=/home/ploi/fs-releases
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+TimeoutStartSec=1800

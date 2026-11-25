@@ -1,0 +1,10 @@
+# /etc/ssh/sshd_config.d/fs-master.conf  (EJEMPLO, no se instala solo). El operador MASTER solo puede subir peticiones y leer respuestas por SFTP,
+# enjaulado, sin shell, sin reenvios. Autenticacion: SOLO clave publica del servicio MASTER (authorized_keys con from="<IP del MASTER>").
+Match User fs-master
+    ChrootDirectory /var/lib/fs-master/sftp
+    ForceCommand internal-sftp -u 0027
+    AuthenticationMethods publickey
+    PasswordAuthentication no
+    AllowTcpForwarding no
+    X11Forwarding no
+    PermitTTY no

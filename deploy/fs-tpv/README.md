@@ -12,3 +12,6 @@ Decisión del OWNER: el único servidor PHP es el del TPV, así que FS (un FS po
 3. TLS (certbot), DNS del subdominio y copias fuera del servidor: igual que el TPV (RUNBOOK del TPV).
 4. Sustituir el aprovisionamiento Docker de `deploy/fs-saas` por este (el Docker sirvió solo para test).
 5. Certificado real de AEAT: solo en este entorno real, tras autorización expresa; sigue pendiente.
+
+## Control MASTER (agente de altas automatizado)
+`master/` + `docs/FACTURALO-CONTROL-MASTER.md`: cola firmada de peticiones (provision/suspend/reactivate/status/entitlements, baja solo en simulacion). Pruebas: `php deploy/fs-tpv/master/tests/run.php`. No instalado en ningun servidor.
