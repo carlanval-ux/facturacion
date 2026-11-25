@@ -62,7 +62,7 @@ echo "[3/5] clave de firma (no se muestra)"
 KEY=/etc/fs-master/keys/m1.key
 if [[ ! -s "$KEY" ]]; then ( umask 077; openssl rand -hex 32 > "$KEY" ); UNDO+=("rm -f '$KEY'"); fi
 chown root:root "$KEY"; chmod 600 "$KEY"
-AK=/etc/fs-master/authorized_keys
+AK=/etc/ssh/fs-master.authorized_keys
 if [[ ! -e "$AK" ]]; then : > "$AK"; UNDO+=("rm -f '$AK'"); fi
 chown root:root "$AK"; chmod 644 "$AK"
 if [[ -n "${MASTER_PUBKEY:-}" ]]; then
@@ -116,7 +116,7 @@ cat <<MSG
 
 Instalado. NADA activado: el temporizador sigue parado.
   clave de firma .......... /etc/fs-master/keys/m1.key (root 600; NO mostrada: copiarla al gestor de secretos del panel con 'sudo cat' en consola segura)
-  claves SFTP del panel ... /etc/fs-master/authorized_keys ($NKEYS clave(s); si 0: anadir la publica del panel con from= y restrict)
+  claves SFTP del panel ... /etc/ssh/fs-master.authorized_keys ($NKEYS clave(s); si 0: anadir la publica del panel con from= y restrict)
   plantilla de correo ..... /etc/fs-master/email-template.json: LA PONE EL OWNER (root 600; JSON con email, host, password...; copia del grupo `email` de redtelecom). Sin ella provision falla en preflight
   cola .................... /var/lib/fs-master/sftp/{requests,responses}
   siguiente paso .......... sudo bash $D/verificar.sh   (y, solo con OK del coordinador, systemctl enable --now fs-master-agent.timer)

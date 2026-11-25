@@ -1,10 +1,10 @@
 # Fragmento sshd para el operador MASTER (lo instala instalar-todo.sh tras `sshd -t`). Solo SFTP enjaulado, sin shell ni reenvios.
-# Las claves autorizadas viven en un fichero de root (no en el chroot): /etc/fs-master/authorized_keys, una linea por clave:
+# Las claves autorizadas viven en un fichero de root legible por fs-master (sshd lo lee con los permisos del usuario: NO puede estar en /etc/fs-master, que es 700; ni en el chroot): /etc/ssh/fs-master.authorized_keys, una linea por clave:
 #   from="<IP del panel MASTER>",restrict ssh-ed25519 AAAA... panel-master
 Match User fs-master
     ChrootDirectory /var/lib/fs-master/sftp
     ForceCommand internal-sftp -u 0027
-    AuthorizedKeysFile /etc/fs-master/authorized_keys
+    AuthorizedKeysFile /etc/ssh/fs-master.authorized_keys
     AuthenticationMethods publickey
     PasswordAuthentication no
     AllowTcpForwarding no
