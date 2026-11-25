@@ -2,7 +2,7 @@
 
 - **Estado (2026-11-25):** diseñado e implementado y probado en local. **Comodín DNS `*.facturalo.redtelecom.app` creado en OVH (id 5451557702, TTL 300)** con autorización del OWNER; comprobado antes que nginx tiene `default_server` `return 444` (`000-catchall`) y que no hay CAA. **Agente NO instalado**: requiere root en el host (el usuario `ploi` solo tiene sudo sin contraseña para los 3 scripts `fs-*`).
 - **Fecha:** 2026-11-25 · **Modelo:** ADR-0002/0013/0014/0019 del TPV (retail-pos), adaptado a FacturaScripts.
-- **Código:** `deploy/fs-tpv/master/` (`lib.php` puro, `agent.php`, `systemd/`, `install-master-agent.sh`, `tests/run.php`).
+- **Código:** `deploy/fs-tpv/master/` (`lib.php` puro, `agent.php`, `systemd/`, `instalar-todo.sh`, `tests/run.php`).
 - **Consumidor:** panel MASTER de Teleco/Clarto (perfil `PRODUCTO=facturalo`, operadores con MFA y roles). El panel **solo escribe peticiones y lee respuestas**; nunca toca BD ni shell del host.
 
 ## 1. Arquitectura
@@ -155,7 +155,7 @@ Por qué:
 
 ## 9. Decisiones tomadas (OWNER delegó 2026-11-25)
 
-1. Instalación: autorizada; pendiente de acceso root (`sudo bash install-master-agent.sh` desde `/home/ploi`), más clave `m1.key`, authorized_keys y sshd.
+1. Instalación: autorizada; pendiente de acceso root (`sudo bash instalar-todo.sh` desde `/home/ploi`), más clave `m1.key`, authorized_keys y sshd.
 2. DNS: comodín creado (ver Estado).
 3. Firma: **HMAC-SHA256 por ahora** (probado); Ed25519 queda como `sig.alg` futuro (el host sí tiene sodium).
 4. Contraseña inicial: una sola vez en la respuesta firmada; sin plugin de invitación.
