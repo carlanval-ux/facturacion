@@ -83,6 +83,8 @@ final class SimHost implements Host
     public array $scripted = [];
     public array $dns = [];
     public array $sqlRows = [];
+    public array $ejercicios = [['codejercicio' => '2026', 'fechainicio' => '2026-01-01', 'fechafin' => '2026-12-31', 'longsubcuenta' => 10]];
+    public array $planBase = [['codejercicio' => '2026']];
     public array $emailRow = [['em' => 'noreply@x.example', 'host' => 'smtp.x.example', 'pw' => 's']];
 
     public function exec(array $argv, array $env = [], int $timeout = 900): array
@@ -116,6 +118,15 @@ final class SimHost implements Host
     public function sql(string $db, string $sql, array $params = [], bool $sensitive = false): array
     {
         $this->log[] = "sql $db: " . preg_replace('/\s+/', ' ', trim($sql)) . ($params ? ($sensitive ? ' [params ocultos]' : ' ' . json_encode($params, JSON_UNESCAPED_UNICODE)) : '');
+        if (str_starts_with(trim($sql), "INSERT INTO ejercicios")) {
+            $this->ejercicios[] = ['codejercicio' => $params[0], 'fechainicio' => $params[2], 'fechafin' => $params[3], 'longsubcuenta' => $params[4]];
+        }
+        if (str_contains($sql, "FROM ejercicios WHERE idempresa = 1")) {
+            return $this->ejercicios;
+        }
+        if (str_contains($sql, "EXISTS (SELECT 1 FROM cuentas")) {
+            return $this->planBase;
+        }
         if (str_contains($sql, "FROM settings WHERE name = 'email'")) {
             return $this->emailRow;
         }
@@ -317,6 +328,8 @@ final class Agent
                     [$x['req']['tenant']['legal_name'], preg_replace('/^(.{0,32}).*$/us', '$1', $x['req']['tenant']['trade_name']), $c['cifnif'], $c['direccion'], $c['ciudad'], $c['provincia'], $c['codpostal'], $c['email'] ?? '']);
                 $this->clearCache($slug);
                 return ['detail' => 'datos de la empresa cargados'];
+            case 'ejercicio':
+                return $this->applyEjercicio($x);
             case 'email':
                 return $this->applyEmail($x);
             case 'entitlements':
@@ -381,6 +394,34 @@ final class Agent
         $this->clearCache($x['slug']);
         $this->setBind($x['slug'], ['entitlements_serial' => max($serial, (int)($bind['entitlements_serial'] ?? 0)), 'entitlements' => $en['modulos'] ?? array_fill_keys(MODULES, false)]);
         return ['detail' => "modulos aplicados (serial $serial)", 'result' => ['entitlements' => ['serial' => $serial, 'modulos' => $en['modulos'] ?? array_fill_keys(MODULES, false)]]];
+    }
+
+    /** Deja abiertos el ejercicio en curso y el siguiente (FS no los crea solo en el alta ni el 1/1; solo al vuelo con un documento fechado) y les copia el plan contable del ejercicio con plan. */
+    private function applyEjercicio(array $x): array
+    {
+        $year = (int)(new \DateTimeImmutable('@' . $this->now()))->setTimezone(new \DateTimeZone('Europe/Madrid'))->format('Y');
+        $rows = $this->h->sql($x['db'], 'SELECT codejercicio, fechainicio, fechafin, longsubcuenta FROM ejercicios WHERE idempresa = 1');
+        $plan = exercises_to_create($rows, $year);
+        if ($plan['error']) {
+            throw new StepFailed('EJERCICIO_CODE_TAKEN', $plan['error']);
+        }
+        $base = $this->h->sql($x['db'], 'SELECT e.codejercicio FROM ejercicios e WHERE e.idempresa = 1 AND EXISTS (SELECT 1 FROM cuentas c WHERE c.codejercicio = e.codejercicio) ORDER BY e.fechainicio DESC LIMIT 1');
+        $made = [];
+        foreach ($plan['crear'] as $n) {
+            $this->h->sql($x['db'], "INSERT INTO ejercicios (codejercicio, nombre, fechainicio, fechafin, estado, longsubcuenta, idempresa) VALUES (?, ?, ?, ?, 'ABIERTO', ?, 1)",
+                [$n['codejercicio'], $n['nombre'], $n['fechainicio'], $n['fechafin'], $n['longsubcuenta']]);
+            if ($base) {                                  // plan de cuentas y subcuentas del ejercicio con plan (idcuenta se remapea por codcuenta)
+                $b = $base[0]['codejercicio'];
+                $c = $n['codejercicio'];
+                $this->h->sql($x['db'], 'INSERT INTO cuentas (codcuenta, codcuentaesp, codejercicio, descripcion, debe, haber, saldo, parent_codcuenta, parent_idcuenta) SELECT codcuenta, codcuentaesp, ?, descripcion, 0, 0, 0, parent_codcuenta, NULL FROM cuentas WHERE codejercicio = ?', [$c, $b]);
+                $this->h->sql($x['db'], 'UPDATE cuentas h JOIN cuentas p ON p.codcuenta = h.parent_codcuenta AND p.codejercicio = h.codejercicio SET h.parent_idcuenta = p.idcuenta WHERE h.codejercicio = ? AND h.parent_codcuenta IS NOT NULL', [$c]);
+                $this->h->sql($x['db'], 'INSERT INTO subcuentas (codcuenta, codcuentaesp, codejercicio, codsubcuenta, debe, haber, descripcion, idcuenta, saldo) SELECT s.codcuenta, s.codcuentaesp, ?, s.codsubcuenta, 0, 0, s.descripcion, nc.idcuenta, 0 FROM subcuentas s JOIN cuentas nc ON nc.codcuenta = s.codcuenta AND nc.codejercicio = ? WHERE s.codejercicio = ?', [$c, $c, $b]);
+            }
+            $made[] = $n['codejercicio'];
+        }
+        $this->clearCache($x['slug']);
+        return ['detail' => $made ? 'ejercicios creados: ' . implode(',', $made) . ($base ? ' (con plan de ' . $base[0]['codejercicio'] . ')' : ' (SIN plan: no hay ejercicio con plan)') : 'ya cubiertos: ' . implode(',', $plan['existentes']),
+            'result' => ['ejercicios' => ['creados' => $made, 'existentes' => $plan['existentes'], 'plan_copiado' => $made && $base ? true : false]]];
     }
 
     /** Lee y valida la plantilla de correo (fichero de root). Los errores no incluyen valores. */

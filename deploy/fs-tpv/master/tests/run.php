@@ -118,7 +118,7 @@ foreach ($T as [$s, $a, $okv, $noop, $next]) {
 
 // ---------- agente en dry-run con SimHost ----------
 $tmp = sys_get_temp_dir() . '/fsm-' . bin2hex(random_bytes(4));
-$mk = function () use ($tmp): array {
+$mk = function (int $ts = T0 + 20) use ($tmp): array {
     $d = $tmp . '/' . bin2hex(random_bytes(3));
     foreach (['q/requests', 'q/responses', 'keys', 'w'] as $s) {
         mkdir("$d/$s", 0700, true);
@@ -130,7 +130,7 @@ $mk = function () use ($tmp): array {
     $h->files['/home/ploi/fs-releases/v1.tar.gz.sha256'] = 'x';
     $h->files['/etc/fs-master/default-release'] = "v1\n";
     $h->files['/etc/fs-master/email-template.json'] = json_encode(['email' => 'noreply@acme.example', 'host' => 'smtp.acme.example', 'port' => 587, 'password' => 'CLAVE-SECRETA-SMTP', 'mailer' => 'SMTP']);
-    $now = T0 + 20;
+    $now = $ts;
     $a = new Agent(array_merge(Agent::CONF_DEFAULTS, ['queue' => "$d/q", 'work' => "$d/w", 'keys' => "$d/keys"]), $h, function () use (&$now) { return $now; });
     return [$d, $h, $a];
 };
@@ -150,7 +150,7 @@ ok($a->runOnce() === 1, 'se atiende 1 peticion');
 $r = $resp($d, $ULIDS[0]);
 ok($r['status'] === 'succeeded' && $r['tenant_state'] === 'active', 'provision: succeeded/active', json_encode($r['error'] ?? null));
 ok(verify($r, ['m1' => KEY], 'resp') === null, 'la respuesta va firmada (dominio resp)');
-ok($names($r) === ['preflight:ok', 'bind:ok', 'provision:ok', 'bootstrap:ok', 'deploy:ok', 'company:ok', 'email:ok', 'entitlements:ok', 'verify:ok', 'admin:ok'], 'orden de pasos', implode(',', $names($r)));
+ok($names($r) === ['preflight:ok', 'bind:ok', 'provision:ok', 'bootstrap:ok', 'deploy:ok', 'company:ok', 'ejercicio:ok', 'email:ok', 'entitlements:ok', 'verify:ok', 'admin:ok'], 'orden de pasos', implode(',', $names($r)));
 $pw = $r['result']['admin']['initial_password'] ?? '';
 ok(strlen($pw) === 20 && $r['result']['admin']['nick'] === 'ana.lopez', 'admin creado con clave inicial de 20 car.');
 ok(!str_contains(json_encode($h->log), $pw), 'la clave en claro no aparece en comandos ni SQL (solo hash)');
@@ -345,6 +345,63 @@ $drop($d, req('provision'));
 $a->runOnce();
 $u = array_values(array_filter($h->log, fn($l) => str_contains($l, 'UPDATE empresas')))[0] ?? '';
 ok(str_contains($u, '["ACME GESTION SOCIEDAD LIMITADA","Acme Gestion"'), 'Empresa.nombre = razon social censal; nombrecorto = nombre comercial', $u);
+
+
+// ---------- ejercicios (paso ejercicio) ----------
+$E = fn(string $c, string $i, string $f, int $l = 10) => ['codejercicio' => $c, 'fechainicio' => $i, 'fechafin' => $f, 'longsubcuenta' => $l];
+$p = exercises_to_create([$E('2026', '2026-01-01', '2026-12-31', 9)], 2026);
+ok(count($p['crear']) === 1 && $p['crear'][0]['codejercicio'] === '2027' && $p['crear'][0]['longsubcuenta'] === 9 && $p['existentes'] === ['2026'], 'solo se crea el siguiente; hereda longsubcuenta del mas reciente');
+$p = exercises_to_create([], 2026);
+ok(array_column($p['crear'], 'codejercicio') === ['2026', '2027'] && $p['crear'][0]['longsubcuenta'] === 10 && $p['crear'][1]['fechafin'] === '2027-12-31', 'sin ejercicios: crea el actual y el siguiente');
+$p = exercises_to_create([$E('2026', '2026-01-01', '2026-12-31'), $E('2027', '2027-01-01', '2027-12-31')], 2026);
+ok($p['crear'] === [] && $p['existentes'] === ['2026', '2027'], 'ya cubiertos: no crea nada (idempotente)');
+$p = exercises_to_create([$E('A', '2026-07-01', '2027-06-30')], 2026);
+ok(count($p['crear']) === 0 || $p['crear'][0]['codejercicio'] !== '2026', 'un ejercicio partido que se solapa no se toca ni se duplica');
+$p = exercises_to_create([$E('2027', '2025-01-01', '2025-12-31')], 2026);
+ok(array_column($p['crear'], 'codejercicio') === ['2026', '0027'], 'codigo ocupado por otro ejercicio: alternativa 00yy', json_encode($p));
+$p = exercises_to_create([$E('2027', '2025-01-01', '2025-12-31'), $E('0027', '2024-01-01', '2024-12-31')], 2026);
+ok($p['crear'][0]['codejercicio'] === '2026' && $p['error'] !== null, 'sin codigo libre: error');
+// agente
+[$d, $h, $a] = $mk();
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+$ins = array_values(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO ejercicios')));
+ok($r['status'] === 'succeeded' && count($ins) === 1 && str_contains($ins[0], '["2027","2027","2027-01-01","2027-12-31",10]'), 'alta: crea solo 2027 (2026 ya existia, no se toca)', json_encode($ins));
+ok(count(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO cuentas') || str_contains($l, 'UPDATE cuentas h JOIN') || str_contains($l, 'INSERT INTO subcuentas'))) === 3, 'plan copiado: cuentas, parent remapeado y subcuentas');
+ok($r['result']['ejercicios']['creados'] === ['2027'] && $r['result']['ejercicios']['plan_copiado'] === true, 'resultado: ejercicios creados');
+ok(!array_filter($h->log, fn($l) => preg_match('/(UPDATE|DELETE).*ejercicios/', $l)), 'nunca se modifica ni borra un ejercicio existente');
+// sin ejercicios y sin plan base
+[$d, $h, $a] = $mk();
+$h->ejercicios = [];
+$h->planBase = [];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok(count(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO ejercicios'))) === 2 && !array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO cuentas')) && $r['result']['ejercicios']['plan_copiado'] === false, 'sin plan base: crea 2026 y 2027 sin copiar plan (lo avisa)');
+// 31/12 23:30 UTC = 1/1 en Madrid: el "ano en curso" ya es el nuevo
+[$d, $h, $a] = $mk(strtotime('2026-12-31T23:30:00Z'));
+$drop($d, req('provision', ['requested_at' => '2026-12-31T23:20:00Z']));
+$a->runOnce();
+$ins = array_values(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO ejercicios')));
+ok(count($ins) === 2 && str_contains($ins[0], '"2027"') && str_contains($ins[1], '"2028"'), 'zona Europe/Madrid: el 1/1 local cuenta como ano nuevo', json_encode($ins));
+
+// accion ejercicio (reconciliacion anual, p. ej. el MASTER la envia a todos los tenants el 1/1)
+[$d, $h, $a] = $mk(strtotime('2027-01-01T09:00:00Z'));
+$h->files['/etc/fs/tenants/acme.master.json'] = json_encode(['tenant_id' => '01JD00000000000000000000T1', 'state' => 'active']);
+$h->files['/srv/fs/acme/current'] = 'x';
+$drop($d, req('ejercicio', ['requested_at' => '2027-01-01T08:59:00Z']));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+$ins = array_values(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO ejercicios')));
+ok($r['status'] === 'succeeded' && count($ins) === 2 && str_contains($ins[0], '"2027"') && str_contains($ins[1], '"2028"'), 'accion ejercicio el 1/1: crea 2027 y 2028 sobre un tenant activo', json_encode($r['error'] ?? $ins));
+$drop($d, req('ejercicio', ['requested_at' => '2027-01-01T08:59:30Z'], $ULIDS[1]));
+$a->runOnce();
+ok(count(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO ejercicios'))) === 2 && $resp($d, $ULIDS[1])['result']['ejercicios']['creados'] === [], 'accion ejercicio repetida: idempotente');
+[$d, $h, $a] = $mk();
+$drop($d, req('ejercicio'));
+$a->runOnce();
+ok($resp($d, $ULIDS[0])['error']['code'] === 'BAD_STATE', 'ejercicio sobre tenant inexistente: BAD_STATE');
 
 echo "\n$total comprobaciones, $fail fallos\n";
 exit($fail ? 1 : 0);

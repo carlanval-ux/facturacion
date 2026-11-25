@@ -7,7 +7,7 @@ namespace FsMaster;
 
 const VERSION = 1;
 const BASE_DOMAIN = 'facturalo.redtelecom.app';
-const ACTIONS = ['provision', 'suspend', 'reactivate', 'status', 'entitlements', 'preflight', 'deprovision-dry-run'];
+const ACTIONS = ['provision', 'suspend', 'reactivate', 'status', 'entitlements', 'ejercicio', 'preflight', 'deprovision-dry-run'];
 const MODULES = ['impagos', 'sepa', 'cobros', 'trimestral', 'aceptacion', 'anticipos', 'recurrentes'];
 // Clave de modulo -> plugin de FS que la implementa (el plugin siempre se activa; el ajuste facturalo.modulos.<clave> lo enciende o apaga).
 const MODULE_PLUGINS = [
@@ -235,7 +235,7 @@ function transition(string $state, string $action): array
             'suspended' => $ok('active'), 'active' => $ok('active', true),
             default => $no("no se puede reactivar un tenant en estado $state"),
         },
-        'entitlements' => in_array($state, ['active', 'suspended'], true) ? $ok($state) : $no("entitlements requiere active o suspended (hay $state)"),
+        'entitlements', 'ejercicio' => in_array($state, ['active', 'suspended'], true) ? $ok($state) : $no("la accion requiere active o suspended (hay $state)"),
         'status', 'preflight', 'deprovision-dry-run' => $ok($state),
         default => $no('accion invalida'),
     };
@@ -245,8 +245,8 @@ function transition(string $state, string $action): array
 function plan(string $action): array
 {
     return match ($action) {
-        'provision' => ['preflight', 'bind', 'provision', 'bootstrap', 'deploy', 'company', 'email', 'entitlements', 'verify', 'admin'],
-        'suspend' => ['suspend'], 'reactivate' => ['reactivate'], 'entitlements' => ['entitlements'],
+        'provision' => ['preflight', 'bind', 'provision', 'bootstrap', 'deploy', 'company', 'ejercicio', 'email', 'entitlements', 'verify', 'admin'],
+        'suspend' => ['suspend'], 'ejercicio' => ['ejercicio'], 'reactivate' => ['reactivate'], 'entitlements' => ['entitlements'],
         'status' => ['status'], 'preflight' => ['preflight'], 'deprovision-dry-run' => ['deprovision-dry-run'],
     };
 }
@@ -310,4 +310,50 @@ function legal_name_error(mixed $v): ?string
         return 'legal_name: solo mayusculas (como en el censo/certificado), digitos y . , & \' / ( ) - ; sin minusculas ni espacios dobles';
     }
     return null;
+}
+
+/**
+ * Ejercicios que faltan para cubrir el ano en curso y los $count-1 siguientes. Nunca toca los existentes: si el rango del ano
+ * se solapa con alguno, no se crea. Codigo = ano (como FS: Ejercicio::createNew; alternativa "00yy"). longsubcuenta = el del mas reciente.
+ * @param list<array{codejercicio:string,fechainicio:string,fechafin:string,longsubcuenta:mixed}> $existing fechas Y-m-d
+ * @return array{crear:list<array<string,mixed>>,existentes:list<string>,error:?string}
+ */
+function exercises_to_create(array $existing, int $year, int $count = 2): array
+{
+    $long = 10;
+    $latest = '';
+    $codes = [];
+    foreach ($existing as $e) {
+        $codes[$e['codejercicio']] = true;
+        if ($e['fechainicio'] > $latest) {
+            $latest = $e['fechainicio'];
+            $long = (int)$e['longsubcuenta'] ?: 10;
+        }
+    }
+    $out = ['crear' => [], 'existentes' => [], 'error' => null];
+    for ($y = $year; $y < $year + $count; $y++) {
+        [$ini, $fin] = ["$y-01-01", "$y-12-31"];
+        $hit = null;
+        foreach ($existing as $e) {
+            if ($e['fechainicio'] <= $fin && $e['fechafin'] >= $ini) {
+                $hit = $e['codejercicio'];
+                break;
+            }
+        }
+        if ($hit !== null) {
+            $out['existentes'][] = $hit;
+            continue;
+        }
+        $code = (string)$y;
+        if (isset($codes[$code])) {
+            $code = sprintf('00%02d', $y % 100);
+        }
+        if (isset($codes[$code])) {
+            $out['error'] = "sin codigo libre para el ejercicio $y";
+            return $out;
+        }
+        $codes[$code] = true;
+        $out['crear'][] = ['codejercicio' => $code, 'nombre' => (string)$y, 'fechainicio' => $ini, 'fechafin' => $fin, 'longsubcuenta' => $long];
+    }
+    return $out;
 }

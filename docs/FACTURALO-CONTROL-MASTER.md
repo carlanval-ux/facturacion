@@ -59,7 +59,7 @@ Reglas (el agente rechaza todo lo demás, **campos desconocidos incluidos**):
 | Campo | Regla |
 |---|---|
 | `version` | `1` |
-| `action` | `provision`, `suspend`, `reactivate`, `status`, `entitlements`, `preflight`, `deprovision-dry-run` |
+| `action` | `provision`, `suspend`, `reactivate`, `status`, `entitlements`, `ejercicio`, `preflight`, `deprovision-dry-run` |
 | `tenant.id` | ULID estable del MASTER; el slug queda ligado a él **para siempre** (`/etc/fs/tenants/<slug>.master.json`) |
 | `tenant.slug` | `^[a-z0-9][a-z0-9-]{0,26}[a-z0-9]$` (2-28), sin `--` (IDN), no reservado: `master www api admin mail smtp imap ftp ns1 ns2 app panel portal status staging test demo motor facturalo teleco clarto redtelecom tpv root localhost default cdn static assets dev prod backup dns vpn git ci support soporte billing ploi` ni prefijos `teleco-`/`fs-`. Inmutable. Mismo patrón que los scripts del host (así el slug nunca es una opción para `useradd`/`mysql`/nginx) |
 | `tenant.hostname` | exactamente `<slug>.facturalo.redtelecom.app` (sin dominios propios en v1) |
@@ -95,7 +95,7 @@ Los 7 módulos (`facturalo.modulos.<clave>` en `settings`, fila `facturalo`): `i
 
 - `status`: `succeeded` · `failed` (se ejecutó y falló; ver `error` y `result.rollback`) · `rejected` (no se ejecutó nada: firma, contrato, estado). `error = {step, code, message, retryable}` en `failed`; en `rejected` el motivo va en `result` (`{step, code, message}`).
 - `steps[].status`: `ok` · `skipped` (ya hecho / reanudación / noop) · `failed`.
-- Códigos: `BAD_JSON`, `BAD_SIGNATURE`, `INVALID`, `REQUEST_ID_REUSED`, `PROTECTED`, `SLUG_BOUND` (slug de otro `tenant.id`), `SLUG_TAKEN` (instalación no gestionada), `BAD_STATE`, y de paso: `DNS_NOT_READY`*, `RELEASE_MISSING`, `PROVISION_FAILED`, `BOOTSTRAP_FAILED`, `DEPLOY_FAILED`, `HEALTH_FAILED`*, `EMAIL_TEMPLATE_MISSING`, `EMAIL_TEMPLATE_INVALID`, `EMAIL_NOT_CONFIGURED`, `EMAIL_SMTP_UNREACHABLE`*, `SERIAL_NOT_NEWER`, `NO_VHOST`, `NGINX_TEST_FAILED`, `NGINX_RELOAD_FAILED` (* = `retryable`).
+- Códigos: `EJERCICIO_CODE_TAKEN`, `BAD_JSON`, `BAD_SIGNATURE`, `INVALID`, `REQUEST_ID_REUSED`, `PROTECTED`, `SLUG_BOUND` (slug de otro `tenant.id`), `SLUG_TAKEN` (instalación no gestionada), `BAD_STATE`, y de paso: `DNS_NOT_READY`*, `RELEASE_MISSING`, `PROVISION_FAILED`, `BOOTSTRAP_FAILED`, `DEPLOY_FAILED`, `HEALTH_FAILED`*, `EMAIL_TEMPLATE_MISSING`, `EMAIL_TEMPLATE_INVALID`, `EMAIL_NOT_CONFIGURED`, `EMAIL_SMTP_UNREACHABLE`*, `SERIAL_NOT_NEWER`, `NO_VHOST`, `NGINX_TEST_FAILED`, `NGINX_RELOAD_FAILED` (* = `retryable`).
 - **Contraseña inicial del administrador:** solo en la respuesta de un `provision` `succeeded` (el panel debe mostrarla **una vez** al operador y no guardarla en claro; FS no tiene “cambiar al primer inicio”, así que se pide al cliente cambiarla o usar «recuperar contraseña»). En el host solo queda su hash; el estado interno la sustituye por `[entregada]`. Se crea al final del alta (paso `admin`), así un alta fallida nunca deja usuario. **Pendiente de decisión OWNER:** alternativa con enlace de invitación (como el TPV) requeriría un plugin FS que no existe.
 
 ## 6. Estados y acciones
@@ -109,6 +109,7 @@ Estado del tenant (en el registro del host `/etc/fs/tenants/<slug>.master.json`)
 | `reactivate` | suspended | `active` | ya activo = `noop` |
 | `entitlements` | active, suspended | igual | `serial` estrictamente creciente por tenant (anti-rollback → `SERIAL_NOT_NEWER`); escribe los 7 ajustes y vacía `FileCache` |
 | `status` | cualquiera | igual | solo lectura: estado, módulos y serial, vhost, instalado, release, `GET /login`, DNS, `email_configured` (booleano; nunca valores) |
+| `ejercicio` | active, suspended | igual | reconciliación de ejercicios (ver §6.1): crea los que falten del año en curso (hora Europe/Madrid) y el siguiente; idempotente; el MASTER puede enviarla a todos los tenants activos cada 1/1 |
 | `preflight` | cualquiera | igual | DNS + release disponible; no crea nada |
 | `deprovision-dry-run` | cualquiera | igual | lista lo que una baja eliminaría; **la baja real no existe** (hace falta decisión del OWNER y copia previa) |
 
@@ -120,12 +121,22 @@ Estado del tenant (en el registro del host `/etc/fs/tenants/<slug>.master.json`)
 4. `bootstrap` — `fs-bootstrap-tenant`: instala FS, **certbot por host (HTTP-01)**, activa `TelecoBridge`, `Facturalo` y los 7 plugins de módulo (`FS_EXTRA_PLUGINS`), crea el token de API mínimo.
 5. `deploy` — `fs-deploy-release` (mueve `config.php`/`MyFiles` a `shared`, activa la release, `Plugins::deploy`, salud; revierte solo si falla).
 6. `company` — sustituye la empresa ficticia del asistente por los datos reales (`nombre` = `legal_name`, `nombrecorto` = `trade_name`) (UPDATE parametrizado).
+6b. `ejercicio` — deja abiertos el ejercicio en curso y el siguiente (§6.1).
 7. `email` — copia el grupo de ajustes `email` de FS (SMTP noreply) desde la plantilla `/etc/fs-master/email-template.json` (root 600, JSON objeto con al menos `email`, `host`, `password`; nunca va en la petición, el repo ni los logs: el SQL se registra con parámetros ocultos), vacía `FileCache` (`tools-settings.cache` oculta el cambio), comprueba la misma condición que `NewMail::canSendMail()` (email, host y password no vacíos) y que el SMTP responde por TCP. **No envía correo real**: `/RecuperarClave` responde igual envíe o no, y mandaría un enlace al cliente. La plantilla se valida ya en `preflight` (`EMAIL_TEMPLATE_MISSING`/`EMAIL_TEMPLATE_INVALID`, antes de crear nada).
 8. `entitlements` — escribe los 7 `facturalo.modulos.*`.
 9. `verify` — `GET https://<host>/login` = 200.
 10. `admin` — usuario propietario (nick derivado del correo) con contraseña aleatoria.
 
 **Rollback (decisión):** solo se deshace lo **reversible**: si falló tras crear el tenant se deshabilita el vhost (deja de servirse lo a medias) y el registro pasa a `error`. **Nunca se borran datos, BD ni usuarios del sistema**: borrar es irreversible y el host aloja producción. Reintentar con otro `request_id` reanuda (repone el vhost y continúa). La limpieza total de un alta fallida es manual.
+
+### 6.1 Ejercicios: qué hace FS y qué hace el agente
+
+Hallazgos en el código de FS (`Core/Model/Ejercicio.php`, `Wizard`, `BusinessDocument`):
+- **Instalación:** `Ejercicio::install()` crea UN ejercicio, el del año de la instalación (código = año, `01-01`..`31-12`, `ABIERTO`, `longsubcuenta` 10, empresa 1). El asistente importa el plan contable solo en ese ejercicio.
+- **No hay apertura automática el 1/1:** ni cron ni plugin crea el ejercicio nuevo. FS lo crea «al vuelo» (`loadFromDate($fecha)` con `create=true`) solo cuando alguien graba un documento, asiento o pago con fecha de un año sin ejercicio; ese ejercicio nace **sin plan contable**. El cierre/apertura contable (`AccountingClosingOpening`) también crea el siguiente.
+- Un tenant dado de alta tarde en el año o sin actividad el 1/1 puede por tanto quedarse sin ejercicio (o con uno sin plan) para el año nuevo.
+
+Qué hace el agente (paso `ejercicio` del alta y acción `ejercicio`): calcula el año en `Europe/Madrid`; para el año en curso y el siguiente crea el ejercicio **solo si ningún ejercicio existente se solapa con sus fechas** (nunca modifica ni borra los existentes); código = año (alternativa `00yy`, como FS), fechas 1/1-31/12, `ABIERTO`, `longsubcuenta` del ejercicio más reciente; y copia a cada ejercicio nuevo el plan (`cuentas` con su jerarquía remapeada y `subcuentas`, con saldos a 0) del ejercicio más reciente que tenga plan. Si no hay ninguno con plan, crea el ejercicio igualmente y lo avisa (`plan_copiado: false`). Límite: copia las subcuentas tal cual están en el ejercicio base (en un alta nueva son las del plan estándar); el SQL no se ha ejecutado contra MySQL real. Recomendación: el panel MASTER envía `ejercicio` a todos los tenants `active` cada 1 de enero (y en diciembre).
 
 ### Auditoría
 
@@ -145,7 +156,7 @@ Por qué:
 
 ## 8. Pruebas realizadas (de verdad) y límites
 
-`php deploy/fs-tpv/master/tests/run.php` → **157 comprobaciones, 0 fallos**, sin tocar red ni servidor (PHP 8.5 local, `SimHost` en memoria):
+`php deploy/fs-tpv/master/tests/run.php` → **173 comprobaciones, 0 fallos**, sin tocar red ni servidor (PHP 8.5 local, `SimHost` en memoria):
 
 - Slug: válidos, 13+ inválidos/reservados/inyección (`../x`, `a\nb`, `ab;rm`, `xn--`, `a--b`).
 - Firma: canónico, firma válida, dominio req/resp, kid desconocido, clave corta, documento manipulado, sin firma, `alg:none`.
