@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { huellaAlta, importe, mulBp } from '../src/registro.js';
 import { cifrarSecretos, descifrarSecretos, extraerNif, verificarCertificado } from '../src/certificados.js';
-import { validarDestino, ErrorEntorno } from '../src/entorno.js';
+import { prodHabilitadoDe, validarDestino, ErrorEntorno } from '../src/entorno.js';
 import { enviarSoap } from '../src/transporte.js';
 
 test('huella: ejemplo oficial 1 de la AEAT (HUE §6)', () => {
@@ -38,7 +38,13 @@ test('verificación: sello válido; ajeno, caducado, usos, representante sin apo
   assert.match(verificarCertificado(info(), ctx({ entorno: 'prod' })).problemas.join(), /prueba no sirve en producción/);
 });
 
-test('producción bloqueada en código y en destino', async () => {
+test('puerta global: solo «true» la abre', () => {
+  for (const v of [undefined, '', 'false', '1', 'TRUE', 'yes', ' true']) assert.equal(prodHabilitadoDe({ VERIFACTU_PROD_HABILITADO: v }), false, String(v));
+  assert.equal(prodHabilitadoDe({ VERIFACTU_PROD_HABILITADO: 'true' }), true);
+  assert.equal(prodHabilitadoDe({}), false);
+});
+
+test('producción bloqueada por defecto y en destino', async () => {
   for (const u of ['https://www1.agenciatributaria.gob.es/x', 'https://www2.agenciatributaria.gob.es/x', 'https://sub.agenciatributaria.gob.es/x', 'https://WWW10.AgenciaTributaria.gob.es./x'])
     assert.throws(() => validarDestino('test', u), (e) => e.codigo === 'prod_bloqueado_en_test', u);
   assert.throws(() => validarDestino('test', 'https://example.com/x'), (e) => e.codigo === 'fuera_de_lista_blanca');

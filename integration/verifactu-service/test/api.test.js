@@ -130,9 +130,9 @@ test('rotación de token: el anterior deja de valer y los datos se conservan', a
 
 const MODO = (s, id, extra = {}) => s.api('POST', '/admin/instalaciones/modo-real', { token: s.env.ADMIN_TOKEN, body: { id, ...extra } });
 
-test('por defecto todo es pruebas: la puerta global cerrada impide certificado real y modo real', async (t) => {
+test('por defecto todo es pruebas: la puerta global (VERIFACTU_PROD_HABILITADO) cerrada impide certificado real y modo real', async (t) => {
   let llamadas = 0;
-  const s = await levantar({ transporte: async () => { llamadas++; return { cuerpo: RESPUESTA_OK() }; } }); t.after(s.cerrar);
+  const s = await levantar({ env: { VERIFACTU_ENTORNO: 'prod' }, transporte: async () => { llamadas++; return { cuerpo: RESPUESTA_OK() }; } }); t.after(s.cerrar);
   const A = await s.instalacion(NIF_A);
   assert.equal(s.db.prepare('SELECT modo_real FROM instalaciones').get().modo_real, 0, 'modo_real por defecto = 0');
   const est = (await s.api('GET', '/v1/estado', { token: A.token })).json;
@@ -147,7 +147,7 @@ test('por defecto todo es pruebas: la puerta global cerrada impide certificado r
 
 test('el endpoint lo elige SOLO el check modo_real: en pruebas nunca se envía a producción', async (t) => {
   const vistos = [];
-  const s = await levantar({ prodHabilitado: true, env: { VERIFACTU_URL_TEST: undefined, VERIFACTU_ENTORNO: 'prod' }, transporte: async (o) => { vistos.push(o); return { cuerpo: RESPUESTA_OK() }; } }); t.after(s.cerrar);
+  const s = await levantar({ env: { VERIFACTU_PROD_HABILITADO: 'true', VERIFACTU_URL_TEST: undefined }, transporte: async (o) => { vistos.push(o); return { cuerpo: RESPUESTA_OK() }; } }); t.after(s.cerrar);
   const A = await s.instalacion(NIF_A), B = await s.instalacion(NIF_B);
   await subirCert(s.api, A.token, p12A);
   // 1) Puerta global ABIERTA y variable de entorno «prod», pero modo_real=0: sigue yendo a pruebas.

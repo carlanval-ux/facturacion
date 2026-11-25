@@ -60,11 +60,11 @@ export async function simulado() {
 }
 
 // Arranca el servicio con BD en memoria. `entorno` y `ahora` se pueden forzar.
-export async function levantar({ env = {}, transporte, ahora, prodHabilitado } = {}) {
+export async function levantar({ env = {}, transporte, ahora } = {}) {
   const sim = await simulado();
   const e = { CERT_MASTER_KEY: randomBytes(32).toString('base64'), ADMIN_TOKEN: 'admin-token-de-prueba-0123456789', VERIFACTU_URL_TEST: sim.url, ...env };
   const db = abrirDb();
-  const server = crearApp({ db, env: e, ...(transporte ? { transporte } : {}), ...(ahora ? { ahora } : {}), ...(prodHabilitado !== undefined ? { prodHabilitado } : {}) });
+  const server = crearApp({ db, env: e, ...(transporte ? { transporte } : {}), ...(ahora ? { ahora } : {}) });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const api = async (metodo, ruta, { token, body } = {}) => {

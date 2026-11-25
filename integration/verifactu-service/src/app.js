@@ -2,7 +2,7 @@
 // Ninguna respuesta incluye el PKCS#12, la contraseña ni la DEK; no se registra ningún cuerpo de petición.
 import http from 'node:http';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { ErrorEntorno, PROD_HABILITADO } from './entorno.js';
+import { ErrorEntorno, prodHabilitadoDe } from './entorno.js';
 import { TIPOS, claveMaestra, cifrarSecretos, descifrarSecretos, inspeccionarP12, verificarCertificado, ErrorCertificado } from './certificados.js';
 import { construirAlta, construirAnulacion, construirEnvio, leerRespuesta, fechaAEAT } from './registro.js';
 import { enviarSoap } from './transporte.js';
@@ -23,8 +23,8 @@ const META_CERT = ['id', 'entorno', 'tipo', 'alias', 'titular_nif', 'titular_nom
 const metaCert = (c, ahora) => c && { ...Object.fromEntries(META_CERT.map((k) => [k, c[k]])), cualificado: !!c.cualificado, autofirmado: !!c.autofirmado, avisos: JSON.parse(c.avisos),
   vigente: c.estado === 'activo' && new Date(c.valido_desde) <= ahora && new Date(c.valido_hasta) > ahora, dias_restantes: Math.max(0, Math.floor((new Date(c.valido_hasta) - ahora) / 864e5)) };
 
-// prodHabilitado: puerta global (código, entorno.js). Solo las pruebas la inyectan; en ejecución real vale PROD_HABILITADO.
-export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora = () => new Date(), prodHabilitado = PROD_HABILITADO }) {
+export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora = () => new Date() }) {
+  const prodHabilitado = prodHabilitadoDe(env); // puerta global: ajuste de despliegue VERIFACTU_PROD_HABILITADO=true (defecto cerrada)
   const q = (sql, ...p) => db.prepare(sql).get(...p);
   const qa = (sql, ...p) => db.prepare(sql).all(...p);
   const run = (sql, ...p) => db.prepare(sql).run(...p);
@@ -134,7 +134,7 @@ export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora
       const inst = q('SELECT * FROM instalaciones WHERE id=? AND activa=1', txt(body.id, 60, 'id'));
       exige(inst, 404, 'No existe');
       if (body.activar !== true) { run('UPDATE instalaciones SET modo_real=0 WHERE id=?', inst.id); audit(inst, 'modo_real_desactivado'); return [200, { modo_real: false }]; }
-      exige(prodHabilitado, 403, 'Producción deshabilitada: requiere autorización expresa del OWNER (puerta global)');
+      exige(prodHabilitado, 403, 'Producción deshabilitada: requiere autorización expresa del OWNER (puerta global VERIFACTU_PROD_HABILITADO)');
       exige(body.confirmacion === `ACTIVAR VERIFACTU REAL ${inst.nif}`, 422, 'Confirmación explícita incorrecta');
       const c = certActivo(inst, 'prod');
       exige(c, 409, 'No hay un certificado real activo y vigente (entorno prod)');

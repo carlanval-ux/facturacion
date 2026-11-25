@@ -60,13 +60,13 @@ Respuestas **nunca** contienen PKCS#12, contraseña ni DEK; los errores 500 no d
 | Fuga por API/log | Solo metadatos; no se registran cuerpos; openssl recibe la contraseña por variable de entorno (no argv) y el PKCS#12 en directorio temporal 0700 borrado siempre. |
 | Cruce de tenants | Tenant solo del token; todas las consultas filtran `instalacion_id`; tests: B no ve ni usa el certificado de A. Instalación desactivable. |
 | Certificado ajeno/caducado/de otra empresa/sin usos | Verificación previa al guardado y re-comprobación de vigencia al remitir; tests negativos. |
-| Remisión real accidental | Dos llaves: (1) puerta global `PROD_HABILITADO = false` **en código** (`entorno.js`; sin ella no se puede ni guardar un certificado real ni activar el modo real, y `validarDestino('prod')` rechaza); (2) check `modo_real` **por tenant** (defecto 0), que es el **único** selector del endpoint (`entornoDe`): ninguna variable de entorno ni la mera presencia de un certificado real lo cambia (test). En TEST, lista blanca (`prewww*.aeat.es`, loopback/`.test`) + lista negra de `agenciatributaria.gob.es` y subdominios; sin redirecciones; validación antes de abrir socket. Activarlo exige cambio de código revisado y autorización expresa del OWNER. |
+| Remisión real accidental | Dos llaves: (1) puerta global, ajuste de despliegue `VERIFACTU_PROD_HABILITADO` (solo `true` la abre; defecto cerrada; sin ella no se puede ni guardar un certificado real ni activar el modo real, y `validarDestino('prod')` rechaza); (2) check `modo_real` **por tenant** (defecto 0), que es el **único** selector del endpoint (`entornoDe`): ninguna variable de entorno ni la mera presencia de un certificado real lo cambia (test). En TEST, lista blanca (`prewww*.aeat.es`, loopback/`.test`) + lista negra de `agenciatributaria.gob.es` y subdominios; sin redirecciones; validación antes de abrir socket. Activarlo exige cambio de código revisado y autorización expresa del OWNER. |
 | Token de instalación robado | Token de 256 bits, solo su hash en BD, desactivable; el servicio escucha en 127.0.0.1 por defecto (poner detrás de TLS). |
 | Apoderamiento falso | Es una declaración: el servicio avisa «NO verificable sin conexión»; solo la AEAT lo confirma. |
 
 ### Pasar a real
 
-Por tenant es **un ajuste** (`modo-real`), sin cambios de código ni de esquema. La puerta global (llave 1) sigue cerrada y abrirla es una línea revisada con autorización expresa del OWNER y validación normativa: es la única parte que exige código, a propósito. Hasta entonces `modo-real` responde 403.
+Por tenant es **un ajuste** (`modo-real`), sin cambios de código ni de esquema. La puerta global (llave 1) es una variable de entorno, cerrada por defecto; abrirla requiere autorización expresa del OWNER y validación normativa, no código. Cerrada, `modo-real` responde 403. Ver el README del servicio.
 
 ## 6. Límites conocidos (no ocultos)
 
