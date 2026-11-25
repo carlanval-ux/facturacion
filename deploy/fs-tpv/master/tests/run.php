@@ -129,6 +129,7 @@ $mk = function () use ($tmp): array {
     $h->files['/home/ploi/fs-releases/v1.tar.gz'] = 'x';
     $h->files['/home/ploi/fs-releases/v1.tar.gz.sha256'] = 'x';
     $h->files['/etc/fs-master/default-release'] = "v1\n";
+    $h->files['/etc/fs-master/email-template.json'] = json_encode(['email' => 'noreply@acme.example', 'host' => 'smtp.acme.example', 'port' => 587, 'password' => 'CLAVE-SECRETA-SMTP', 'mailer' => 'SMTP']);
     $now = T0 + 20;
     $a = new Agent(array_merge(Agent::CONF_DEFAULTS, ['queue' => "$d/q", 'work' => "$d/w", 'keys' => "$d/keys"]), $h, function () use (&$now) { return $now; });
     return [$d, $h, $a];
@@ -149,13 +150,13 @@ ok($a->runOnce() === 1, 'se atiende 1 peticion');
 $r = $resp($d, $ULIDS[0]);
 ok($r['status'] === 'succeeded' && $r['tenant_state'] === 'active', 'provision: succeeded/active', json_encode($r['error'] ?? null));
 ok(verify($r, ['m1' => KEY], 'resp') === null, 'la respuesta va firmada (dominio resp)');
-ok($names($r) === ['preflight:ok', 'bind:ok', 'provision:ok', 'bootstrap:ok', 'deploy:ok', 'company:ok', 'entitlements:ok', 'verify:ok', 'admin:ok'], 'orden de pasos', implode(',', $names($r)));
+ok($names($r) === ['preflight:ok', 'bind:ok', 'provision:ok', 'bootstrap:ok', 'deploy:ok', 'company:ok', 'email:ok', 'entitlements:ok', 'verify:ok', 'admin:ok'], 'orden de pasos', implode(',', $names($r)));
 $pw = $r['result']['admin']['initial_password'] ?? '';
 ok(strlen($pw) === 20 && $r['result']['admin']['nick'] === 'ana.lopez', 'admin creado con clave inicial de 20 car.');
 ok(!str_contains(json_encode($h->log), $pw), 'la clave en claro no aparece en comandos ni SQL (solo hash)');
 $cmds = array_values(array_filter($h->log, fn($l) => str_starts_with($l, 'exec /usr/local/sbin')));
 ok(count($cmds) === 3 && str_contains($cmds[0], 'fs-provision-tenant acme acme.facturalo.redtelecom.app /home/ploi/fs-releases/v1.tar.gz') && str_contains($cmds[1], 'fs-bootstrap-tenant acme') && str_contains($cmds[1], 'FS_EXTRA_PLUGINS') && str_contains($cmds[2], 'fs-deploy-release acme'), 'comandos de host en orden', implode(' | ', $cmds));
-$settings = array_filter($h->log, fn($l) => str_starts_with($l, 'sql fs_acme: INSERT INTO settings'));
+$settings = array_filter($h->log, fn($l) => str_starts_with($l, 'sql fs_acme: INSERT INTO settings') && str_contains($l, "'facturalo'"));
 ok(count($settings) === 7, '7 ajustes facturalo.modulos.* escritos', (string)count($settings));
 ok(str_contains(implode("\n", $settings), '["modulos.impagos","1"') && str_contains(implode("\n", $settings), '["modulos.sepa","0"'), 'impagos=1, sepa=0');
 $bind = json_decode($h->files['/etc/fs/tenants/acme.master.json'], true);
@@ -279,6 +280,51 @@ $drop($d, req('provision', [], $ULIDS[1]));
 $a->runOnce();
 ok($resp($d, $ULIDS[1])['error']['code'] === 'RELEASE_MISSING', 'release sin .sha256: RELEASE_MISSING');
 ok(!array_filter($h->log, fn($l) => str_contains($l, 'fs-provision-tenant')), 'sin release no se aprovisiona');
+
+
+// ---------- correo (paso email) ----------
+ok(email_template_errors(null) !== [] && email_template_errors('{no') !== [] && email_template_errors('[]') !== [], 'plantilla de correo: ausente/ilegible/lista rechazadas');
+ok(email_template_errors('{"email":"a@b.es","host":"smtp.b.es","password":"x"}') === [], 'plantilla de correo valida');
+ok(email_template_errors('{"email":"a@b.es","host":"smtp.b.es"}') !== [], 'plantilla sin password rechazada');
+ok(email_template_errors('{"email":"a@b.es","host":"x;rm -rf /","password":"x"}') !== [], 'plantilla con host malicioso rechazada');
+ok(email_template_errors('{"email":"a@b.es","host":"h.es","password":"x","port":99999}') !== [], 'plantilla con puerto invalido rechazada');
+ok(!str_contains(implode(' ', email_template_errors('{"email":"","host":"h.es","password":"SECRETO"}')), 'SECRETO'), 'los errores de plantilla no incluyen valores');
+// el alta del bloque 1 ya tiene: orden con email, parametros ocultos y sin secreto en el log
+[$d, $h, $a] = $mk();
+$drop($d, req('provision'));
+$a->runOnce();
+ok(!str_contains(json_encode($h->log), 'CLAVE-SECRETA-SMTP'), 'la clave SMTP no aparece en ningun log/comando');
+ok(count(array_filter($h->log, fn($l) => str_contains($l, "INSERT INTO settings (name, properties) VALUES ('email'") && str_ends_with($l, '[params ocultos]'))) === 1, 'ajustes de correo escritos una vez con parametros ocultos');
+ok(count(array_filter($h->log, fn($l) => str_starts_with($l, 'exec timeout 8 bash'))) === 1, 'comprobacion TCP del SMTP');
+ok(!str_contains((string)file_get_contents("$d/q/responses/{$ULIDS[0]}.json"), 'CLAVE-SECRETA-SMTP'), 'la respuesta no contiene la clave SMTP');
+$drop($d, req('status', [], $ULIDS[1]));
+$a->runOnce();
+ok($resp($d, $ULIDS[1])['result']['email_configured'] === true, 'status: email_configured=true');
+$h->emailRow = [];
+$drop($d, req('status', [], $ULIDS[2]));
+$a->runOnce();
+ok($resp($d, $ULIDS[2])['result']['email_configured'] === false, 'status: email_configured=false sin ajustes');
+// plantilla ausente: falla en preflight, antes de crear nada
+[$d, $h, $a] = $mk();
+unset($h->files['/etc/fs-master/email-template.json']);
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'failed' && $r['error']['code'] === 'EMAIL_TEMPLATE_MISSING' && !array_filter($h->log, fn($l) => str_starts_with($l, 'exec /usr/local/sbin')), 'sin plantilla de correo: falla en preflight sin crear nada');
+// plantilla aplicada pero sigue sin correo => fallo y rollback
+[$d, $h, $a] = $mk();
+$h->emailRow = [];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'failed' && $r['error']['step'] === 'email' && $r['error']['code'] === 'EMAIL_NOT_CONFIGURED' && $r['tenant_state'] === 'error', 'correo no configurado tras aplicar: failed/error');
+// SMTP inalcanzable: reintentable
+[$d, $h, $a] = $mk();
+$h->scripted['timeout 8 bash'] = [124, ''];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['error']['code'] === 'EMAIL_SMTP_UNREACHABLE' && $r['error']['retryable'] === true, 'SMTP inalcanzable: reintentable');
 
 echo "\n$total comprobaciones, $fail fallos\n";
 exit($fail ? 1 : 0);

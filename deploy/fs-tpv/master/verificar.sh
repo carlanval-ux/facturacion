@@ -26,6 +26,7 @@ OTHER="$(sshd -T -C user=ploi,host=x,addr=127.0.0.1 2>/dev/null)"
 grep -qi '^chrootdirectory none' <<<"$OTHER" && ok "sshd: ploi NO afectado por el Match" || ko "sshd: el Match afecta a otros usuarios"
 else info "sshd sin configurar para fs-master (opt-in CONFIGURAR_SSHD=1; pendiente hasta que exista el panel)"; fi
 if systemctl is-enabled fs-master-agent.timer >/dev/null 2>&1; then info "temporizador ACTIVADO"; else ok "temporizador sin activar (esperado antes del OK)"; fi
+if [[ "$(stat -c '%U:%a' /etc/fs-master/email-template.json 2>/dev/null)" == "root:600" ]]; then ok "plantilla de correo /etc/fs-master/email-template.json root 600"; else ko "falta /etc/fs-master/email-template.json (root 600): sin ella provision falla en preflight"; fi
 info "claves SFTP autorizadas: $(grep -c . /etc/fs-master/authorized_keys 2>/dev/null || echo 0)"
 TAG="$(cat /etc/fs-master/default-release 2>/dev/null)"
 if [[ -f "/home/ploi/fs-releases/$TAG.tar.gz" && -f "/home/ploi/fs-releases/$TAG.tar.gz.sha256" ]]; then info "release por defecto $TAG: disponible"; else info "release por defecto $TAG: NO publicada (necesaria para provision)"; fi

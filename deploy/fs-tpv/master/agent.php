@@ -18,7 +18,7 @@ interface Host
     public function read(string $path): ?string;
     public function write(string $path, string $data, int $mode = 0600): void;
     public function remove(string $path): void;
-    public function sql(string $db, string $sql, array $params = []): array;
+    public function sql(string $db, string $sql, array $params = [], bool $sensitive = false): array;
     public function dns(string $hostname): array;
 }
 
@@ -64,7 +64,7 @@ final class RealHost implements Host
 
     public function remove(string $path): void { @unlink($path); }
 
-    public function sql(string $db, string $sql, array $params = []): array
+    public function sql(string $db, string $sql, array $params = [], bool $sensitive = false): array
     {
         $pdo = new \PDO("mysql:dbname=$db;charset=utf8mb4", 'root', null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_EMULATE_PREPARES => false]);
         $st = $pdo->prepare($sql);
@@ -83,6 +83,7 @@ final class SimHost implements Host
     public array $scripted = [];
     public array $dns = [];
     public array $sqlRows = [];
+    public array $emailRow = [['em' => 'noreply@x.example', 'host' => 'smtp.x.example', 'pw' => 's']];
 
     public function exec(array $argv, array $env = [], int $timeout = 900): array
     {
@@ -112,9 +113,12 @@ final class SimHost implements Host
     public function write(string $path, string $data, int $mode = 0600): void { $this->log[] = "write $path"; $this->files[$path] = $data; }
     public function remove(string $path): void { $this->log[] = "remove $path"; unset($this->files[$path]); }
 
-    public function sql(string $db, string $sql, array $params = []): array
+    public function sql(string $db, string $sql, array $params = [], bool $sensitive = false): array
     {
-        $this->log[] = "sql $db: " . preg_replace('/\s+/', ' ', trim($sql)) . ($params ? ' ' . json_encode($params, JSON_UNESCAPED_UNICODE) : '');
+        $this->log[] = "sql $db: " . preg_replace('/\s+/', ' ', trim($sql)) . ($params ? ($sensitive ? ' [params ocultos]' : ' ' . json_encode($params, JSON_UNESCAPED_UNICODE)) : '');
+        if (str_contains($sql, "FROM settings WHERE name = 'email'")) {
+            return $this->emailRow;
+        }
         return str_starts_with(trim($sql), 'SELECT') ? ($this->sqlRows[$db][trim($sql)] ?? []) : [];
     }
 
@@ -138,6 +142,7 @@ final class Agent
         'server_ip' => '151.80.149.132',
         'releases' => '/home/ploi/fs-releases',         // <tag>.tar.gz + <tag>.tar.gz.sha256
         'default_release' => '/etc/fs-master/default-release', // fichero con la etiqueta por defecto
+        'email_template' => '/etc/fs-master/email-template.json',   // grupo de ajustes `email` de FS (SMTP noreply); root 600, nunca en peticiones ni logs
         'tenants' => '/etc/fs/tenants', 'base' => '/srv/fs', 'suspend_dir' => '/etc/fs/suspend',
         'protected' => ['redtelecom', 'teleco-test', 'carlos'], // nunca se tocan (existian antes del agente)
         'sbin' => '/usr/local/sbin',
@@ -281,6 +286,7 @@ final class Agent
                 }
                 if ($x['req']['action'] === 'provision') {
                     $tar();
+                    $this->emailTemplate();
                 }
                 return ['detail' => 'dns y artefacto ok'];
             case 'bind':
@@ -311,6 +317,8 @@ final class Agent
                     [$x['req']['tenant']['trade_name'], preg_replace('/^(.{0,32}).*$/us', '$1', $x['req']['tenant']['trade_name']), $c['cifnif'], $c['direccion'], $c['ciudad'], $c['provincia'], $c['codpostal'], $c['email'] ?? '']);
                 $this->clearCache($slug);
                 return ['detail' => 'datos de la empresa cargados'];
+            case 'email':
+                return $this->applyEmail($x);
             case 'entitlements':
                 return $this->applyEntitlements($x, $bind);
             case 'verify':
@@ -326,7 +334,7 @@ final class Agent
                 }
                 $pw = $this->randomPassword();
                 $h->sql($x['db'], "INSERT INTO users (nick, password, email, admin, enabled, idempresa, codalmacen, langcode, homepage, level) VALUES (?, ?, ?, 1, 1, 1, '1', 'es_ES', 'Dashboard', 99)",
-                    [$nick, password_hash($pw, PASSWORD_DEFAULT), $x['req']['tenant']['admin_email']]);
+                    [$nick, password_hash($pw, PASSWORD_DEFAULT), $x['req']['tenant']['admin_email']], true);
                 return ['detail' => 'usuario administrador creado', 'result' => ['admin' => ['nick' => $nick, 'initial_password' => $pw]]];
             case 'suspend':
             case 'reactivate':
@@ -375,6 +383,43 @@ final class Agent
         return ['detail' => "modulos aplicados (serial $serial)", 'result' => ['entitlements' => ['serial' => $serial, 'modulos' => $en['modulos'] ?? array_fill_keys(MODULES, false)]]];
     }
 
+    /** Lee y valida la plantilla de correo (fichero de root). Los errores no incluyen valores. */
+    private function emailTemplate(): array
+    {
+        $raw = $this->h->read($this->d('email_template'));
+        if ($raw === null) {
+            throw new StepFailed('EMAIL_TEMPLATE_MISSING', 'falta ' . $this->d('email_template') . ' (grupo de ajustes email de FS, root 600)');
+        }
+        if ($e = email_template_errors($raw)) {
+            throw new StepFailed('EMAIL_TEMPLATE_INVALID', implode('; ', $e));
+        }
+        return json_decode($raw, true);
+    }
+
+    /** Misma condicion que NewMail::canSendMail() de FS: email, host y password no vacios en settings(email). */
+    private function emailConfigured(string $db): bool
+    {
+        $r = $this->h->sql($db, "SELECT JSON_UNQUOTE(JSON_EXTRACT(properties, '$.email')) AS em, JSON_UNQUOTE(JSON_EXTRACT(properties, '$.host')) AS host, JSON_UNQUOTE(JSON_EXTRACT(properties, '$.password')) AS pw FROM settings WHERE name = 'email'");
+        return isset($r[0]) && (string)$r[0]['em'] !== '' && (string)$r[0]['host'] !== '' && (string)$r[0]['pw'] !== '';
+    }
+
+    private function applyEmail(array $x): array
+    {
+        $t = $this->emailTemplate();
+        $this->h->sql($x['db'], "INSERT INTO settings (name, properties) VALUES ('email', ?) ON DUPLICATE KEY UPDATE properties = JSON_MERGE_PATCH(COALESCE(properties, '{}'), ?)", [json_encode($t), json_encode($t)], true);
+        $this->clearCache($x['slug']);                 // tools-settings.cache oculta el cambio
+        if (!$this->emailConfigured($x['db'])) {
+            throw new StepFailed('EMAIL_NOT_CONFIGURED', 'tras aplicar la plantilla settings(email) sigue sin email, host o password');
+        }
+        $host = (string)$t['host'];
+        $port = (string)((int)($t['port'] ?? 587) ?: 587);
+        [$c] = $this->h->exec(['timeout', '8', 'bash', '-c', 'exec 3<>/dev/tcp/$1/$2', '_', $host, $port]);
+        if ($c !== 0) {
+            throw new StepFailed('EMAIL_SMTP_UNREACHABLE', "no se conecta al servidor SMTP $host:$port", true);
+        }
+        return ['detail' => "correo configurado y SMTP $host:$port alcanzable", 'result' => ['email_configured' => true]];
+    }
+
     private function setSuspended(array $x, bool $on): array
     {
         $slug = $x['slug'];
@@ -405,8 +450,9 @@ final class Agent
         $slug = $x['slug'];
         $r = ['state' => $bind['state'] ?? 'absent', 'entitlements' => $bind['entitlements'] ?? null, 'entitlements_serial' => $bind['entitlements_serial'] ?? 0,
             'vhost' => $this->h->exists("/etc/nginx/sites-available/fs-$slug.conf"), 'installed' => $this->h->exists($this->d('base') . "/$slug/current"),
-            'dns' => $this->h->dns($x['host'])];
+            'dns' => $this->h->dns($x['host']), 'email_configured' => null];
         if ($r['installed']) {
+            $r['email_configured'] = $this->emailConfigured($x['db']);
             [, $out] = $this->h->exec(['curl', '-sk', '-o', '/dev/null', '-m', '15', '-w', '%{http_code}', '--resolve', "{$x['host']}:443:127.0.0.1", "https://{$x['host']}/login"]);
             $r['http_login'] = (int)trim($out);
             [, $rel] = $this->h->exec(['readlink', '-f', $this->d('base') . "/$slug/current"]);
