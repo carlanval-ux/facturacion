@@ -2,13 +2,14 @@
 namespace FacturaScripts\Plugins\Facturalo\Lib;
 
 use FacturaScripts\Core\Tools;
+use FacturaScripts\Core\Where;
 use FacturaScripts\Dinamic\Model\CuentaBanco;
 use PHP_IBAN\IBAN;
 
 /** Alta rapida de una cuenta bancaria desde el desplegable de Formas de pago («Crear…» al estilo Odoo). */
 final class CuentaBancoRapida
 {
-    /** @return array{ok:bool, codcuenta?:string, descripcion?:string, error?:string} */
+    /** @return array{ok:bool, existente?:bool, codcuenta?:string, descripcion?:string, error?:string} */
     public static function crear(string $iban, string $descripcion, ?int $idempresa = null): array
     {
         $iban = strtoupper(str_replace(' ', '', trim($iban)));
@@ -20,10 +21,17 @@ final class CuentaBancoRapida
             return ['ok' => false, 'error' => 'IBAN no válido'];
         }
 
+        $idempresa = $idempresa ?: Tools::settings('default', 'idempresa');
+        // mismo IBAN en la misma empresa: no se duplica, se devuelve la existente para seleccionarla
+        $existente = new CuentaBanco();
+        if ($existente->loadWhere([Where::eq('iban', $iban), Where::eq('idempresa', $idempresa)])) {
+            return ['ok' => true, 'existente' => true, 'codcuenta' => (string)$existente->codcuenta, 'descripcion' => (string)$existente->descripcion];
+        }
+
         $cuenta = new CuentaBanco();
         $cuenta->iban = $iban;
         $cuenta->descripcion = '' !== trim($descripcion) ? trim($descripcion) : 'Cuenta ' . substr($iban, -4);
-        $cuenta->idempresa = $idempresa ?: Tools::settings('default', 'idempresa');
+        $cuenta->idempresa = $idempresa;
         if (false === $cuenta->save()) {
             return ['ok' => false, 'error' => 'No se pudo guardar la cuenta'];
         }

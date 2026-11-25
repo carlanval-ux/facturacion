@@ -22,6 +22,11 @@ final class CuentaBancoRapidaTest extends TestCase
         $this->assertTrue($c->load($r['codcuenta']));
         $this->assertSame('ES9121000418450200051332', $c->iban);
         $this->assertNotEmpty($c->idempresa);
+        // el mismo IBAN no duplica: devuelve la cuenta existente
+        $otra = CuentaBancoRapida::crear('ES9121000418450200051332', 'otra');
+        $this->assertTrue($otra['ok']);
+        $this->assertTrue($otra['existente']);
+        $this->assertSame($r['codcuenta'], $otra['codcuenta']);
         $this->assertTrue($c->delete());
     }
 }
