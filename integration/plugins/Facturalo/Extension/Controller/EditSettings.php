@@ -5,8 +5,8 @@ use Closure;
 use FacturaScripts\Plugins\Facturalo\Lib\Staff;
 
 /**
- * La API (activarla y gestionar sus claves) la controla solo el personal de plataforma:
- * el cliente no ve la pestaña «Claves API» ni el ajuste «Activar API»; tampoco «Secuencias»: la numeración la gobierna la plataforma.
+ * La API (activarla y gestionar sus claves) y las secuencias las controla solo el personal de plataforma:
+ * el cliente no ve las pestañas «Claves API» ni «Secuencias» ni el ajuste «Activar API».
  */
 class EditSettings
 {
@@ -17,8 +17,15 @@ class EditSettings
                 return;
             }
             unset($this->views['ListApiKey'], $this->views['ListSecuenciaDocumento']);
-            if (isset($this->views['SettingsDefault'])) {
-                $this->views['SettingsDefault']->disableColumn('enable_api');
+        };
+    }
+
+    /** Las columnas de la vista se cargan aqui, no en createViews. */
+    public function loadData(): Closure
+    {
+        return function ($viewName, $view) {
+            if ('SettingsDefault' === $viewName && false === Staff::isStaff($this->user->nick ?? null)) {
+                $view->disableColumn('enable-api');
             }
         };
     }
