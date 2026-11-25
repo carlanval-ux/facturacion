@@ -1,4 +1,6 @@
 {
+  "facturalo-empresa-unica": "Este espacio de Facturalo es de una sola empresa: no se pueden crear más empresas.",
+  "facturalo-empresa-unica-baja": "Este espacio de Facturalo es de una sola empresa: no se puede eliminar.",
   "cant-convert-to-innodb": "Imposible convertir la tabla '%tableName%' a InnoDB. Imprescindible para Facturalo.",
   "dasboard-backup-li1": "Si borra o desinstala Facturalo, pierde los datos.",
   "dashboard-backup-p": "Le recordamos que tiene instalado Facturalo en su PC, por tanto los datos (las facturas, clientes, etc...) se almacenan en su PC y solamente en su PC. Haga copias de seguridad de forma regular y guarde esas copias lejos del PC.",

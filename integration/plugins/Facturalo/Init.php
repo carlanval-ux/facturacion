@@ -25,6 +25,9 @@ final class Init extends InitClass
         $this->aplicarDefectos();
         // protección de fecha: no se emiten facturas de cliente con fecha futura
         $this->loadExtension(new Extension\Model\FacturaCliente());
+        // una sola empresa por tenant (se puede levantar con el ajuste facturalo.multiempresa=1)
+        $this->loadExtension(new Extension\Model\Empresa());
+        $this->loadExtension(new Extension\Controller\ListEmpresa());
         // identidad visual (se carga tras el CSS del nucleo)
         AssetManager::addCss(Tools::config('route') . '/Dinamic/Assets/CSS/facturalo.css', 10);
         AssetManager::addJs(Tools::config('route') . '/Dinamic/Assets/JS/facturalo.js', 10);
