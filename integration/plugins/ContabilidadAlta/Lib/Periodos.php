@@ -1,7 +1,7 @@
 <?php
 namespace FacturaScripts\Plugins\ContabilidadAlta\Lib;
 
-use FacturaScripts\Core\Tools;
+use FacturaScripts\Core\Model\Settings;
 
 /**
  * MAPA-18: periodos cerrados. Clarto publica la lista (ajuste facturalo.periodos_cerrados, vía API periodosCerrados);
@@ -13,7 +13,10 @@ final class Periodos
 
     public static function lista(): string
     {
-        return (string)Tools::settings('facturalo', self::AJUSTE, '');
+        // se lee de la base de datos y no de la caché de ajustes: una caché obsoleta (p. ej. otro proceso sin permiso
+        // para borrarla) dejaría pasar fechas ya cerradas. Una consulta por guardado de factura.
+        $s = new Settings();
+        return $s->load('facturalo') ? (string)$s->getProperty(self::AJUSTE) : '';
     }
 
     public static function cerrada(?string $fecha): bool
