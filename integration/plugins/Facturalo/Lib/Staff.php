@@ -19,7 +19,7 @@ final class Staff
 
     /** Controladores solo para staff (minúsculas). */
     const BLOCKED = [
-        'adminplugins', 'updater', 'about', 'configemail', 'editapikey',
+        'adminplugins', 'updater', 'about', 'configemail', 'editapikey', 'editsecuenciadocumento', 'listsecuenciadocumento',
         'listlogmessage', 'editlogmessage', 'editcronjob',
         // plugins de plataforma (VisorErrores, MisInstalaciones)
         'visorerrores', 'listinstalacion', 'editinstalacion',
