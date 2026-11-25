@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="id" display="none" order="90">
+            <widget type="text" fieldname="id"/>
+        </column>
+        <column name="vfp-invoice" order="100">
+            <widget type="text" fieldname="numserie"/>
+        </column>
+        <column name="vfp-type" order="105">
+            <widget type="text" fieldname="tipo"/>
+        </column>
+        <column name="date" display="center" order="110">
+            <widget type="text" fieldname="fecha_expedicion"/>
+        </column>
+        <column name="vfp-environment" display="center" order="115">
+            <widget type="text" fieldname="entorno"/>
+        </column>
+        <column name="state" display="center" order="120">
+            <widget type="select" fieldname="estado" translate="true">
+                <values title="vfp-st-pending">pendiente</values>
+                <values title="vfp-st-accepted">aceptado</values>
+                <values title="vfp-st-accepted-errors">aceptado_errores</values>
+                <values title="vfp-st-rejected">rechazado</values>
+                <values title="vfp-st-error">error</values>
+                <option color="warning">pendiente</option>
+                <option color="success">aceptado</option>
+                <option color="info">aceptado_errores</option>
+                <option color="danger">rechazado</option>
+                <option color="danger">error</option>
+            </widget>
+        </column>
+        <column name="vfp-csv" order="130">
+            <widget type="text" fieldname="csv"/>
+        </column>
+        <column name="vfp-error-code" display="center" order="140">
+            <widget type="text" fieldname="codigo_error"/>
+        </column>
+        <column name="vfp-message" order="150">
+            <widget type="text" fieldname="mensaje"/>
+        </column>
+        <column name="vfp-attempts" display="center" order="160">
+            <widget type="number" fieldname="intentos" decimal="0"/>
+        </column>
+        <column name="vfp-hash" display="none" order="170">
+            <widget type="text" fieldname="huella"/>
+        </column>
+    </columns>
+</view>

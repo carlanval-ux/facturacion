@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<table>
+    <column><name>idempresa</name><type>integer</type><null>NO</null></column>
+    <column><name>modo</name><type>character varying(20)</type><null>NO</null><default>'verifactu'</default></column>
+    <column><name>modo_pruebas</name><type>boolean</type><null>NO</null><default>true</default></column>
+    <column><name>sello</name><type>boolean</type><null>NO</null><default>false</default></column>
+    <column><name>cert_nombre</name><type>character varying(200)</type></column>
+    <column><name>cert_vencimiento</name><type>date</type></column>
+    <column><name>desde</name><type>date</type></column>
+    <column><name>proximo_envio</name><type>timestamp</type></column>
+    <constraint><name>vfp_config_pkey</name><type>PRIMARY KEY (idempresa)</type></constraint>
+</table>

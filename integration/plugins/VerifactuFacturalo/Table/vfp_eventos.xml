@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<table>
+    <column><name>id</name><type>serial</type></column>
+    <column><name>idempresa</name><type>integer</type></column>
+    <column><name>fecha</name><type>timestamp</type></column>
+    <column><name>tipo</name><type>character varying(30)</type><null>NO</null></column>
+    <column><name>detalle</name><type>text</type></column>
+    <column><name>nick</name><type>character varying(50)</type></column>
+    <constraint><name>vfp_eventos_pkey</name><type>PRIMARY KEY (id)</type></constraint>
+</table>
