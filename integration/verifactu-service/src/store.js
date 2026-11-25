@@ -7,7 +7,8 @@ export function abrirDb(ruta = ':memory:') {
     PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS instalaciones (
       id TEXT PRIMARY KEY, nombre TEXT NOT NULL, nif TEXT NOT NULL, nombre_empresa TEXT NOT NULL,
-      token_hash TEXT NOT NULL UNIQUE, activa INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
+      token_hash TEXT NOT NULL UNIQUE, activa INTEGER NOT NULL DEFAULT 1, modo_real INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS auditoria (id INTEGER PRIMARY KEY AUTOINCREMENT, instalacion_id TEXT NOT NULL, accion TEXT NOT NULL, detalle TEXT, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS certificados (
       id TEXT PRIMARY KEY, instalacion_id TEXT NOT NULL REFERENCES instalaciones(id), entorno TEXT NOT NULL CHECK (entorno IN ('test','prod')),
       tipo TEXT NOT NULL, alias TEXT NOT NULL, titular_nif TEXT, titular_nombre TEXT, emisor TEXT, serie TEXT, huella_sha256 TEXT,

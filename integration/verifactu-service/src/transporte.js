@@ -11,8 +11,8 @@ export class ErrorTransporte extends Error {
 }
 
 // cert: { p12: Buffer, passphrase: string } (descifrados un instante por quien llama). Devuelve { status, cuerpo }.
-export async function enviarSoap({ entorno, url, xml, soapAction = '', cert = null, timeoutMs = 30_000, motor = null }) {
-  const destino = validarDestino(entorno, url); // lanza ErrorEntorno antes de cualquier conexión
+export async function enviarSoap({ entorno, url, xml, soapAction = '', cert = null, timeoutMs = 30_000, motor = null, prodHabilitado }) {
+  const destino = validarDestino(entorno, url, prodHabilitado); // lanza ErrorEntorno antes de cualquier conexión
   return await new Promise((resolve, reject) => {
     const cliente = destino.protocol === 'https:' ? https : http;
     const opciones = {

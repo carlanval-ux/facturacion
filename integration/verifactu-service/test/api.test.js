@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { generarP12, levantar, subirCert, factura, NIF_A, NIF_B, PASS } from './util.js';
+import { generarP12, generarP12Real, RESPUESTA_OK, levantar, subirCert, factura, NIF_A, NIF_B, PASS } from './util.js';
 
 const p12A = generarP12({ nif: NIF_A });
 
@@ -96,17 +96,6 @@ test('en reposo: ni el PKCS#12 ni la contraseña aparecen en la base de datos', 
   assert.ok(!JSON.stringify({ ...f, p12_cifrado: 0, pass_cifrada: 0, dek_cifrada: 0 }).includes(PASS));
 });
 
-test('producción bloqueada: el servicio no guarda certificados ni transmite', async (t) => {
-  let llamadas = 0;
-  const s = await levantar({ env: { VERIFACTU_ENTORNO: 'prod' }, transporte: async () => { llamadas++; } }); t.after(s.cerrar);
-  const A = await s.instalacion(NIF_A);
-  const up = await subirCert(s.api, A.token, p12A);
-  assert.equal(up.status, 403); assert.equal(up.json.codigo, 'prod_deshabilitado');
-  assert.equal((await s.api('POST', '/v1/registros/alta', { token: A.token, body: { factura: factura() } })).status, 403);
-  assert.equal((await s.api('GET', '/v1/estado', { token: A.token })).status, 403);
-  assert.equal(llamadas, 0);
-});
-
 test('destino de producción y redirecciones: se bloquean antes de enviar', async (t) => {
   const s1 = await levantar({ env: { VERIFACTU_URL_TEST: 'https://www1.agenciatributaria.gob.es/wlpl/x' } }); t.after(s1.cerrar);
   const A = await s1.instalacion(NIF_A); await subirCert(s1.api, A.token, p12A);
@@ -137,4 +126,63 @@ test('rotación de token: el anterior deja de valer y los datos se conservan', a
   assert.equal((await s.api('GET', '/v1/estado', { token: A.token })).status, 401);
   assert.equal((await s.api('GET', '/v1/estado', { token: r.json.token })).json.certificado.titular_nif, NIF_A);
   assert.equal((await s.api('POST', '/admin/instalaciones/rotar-token', { token: A.token, body: { id: A.id } })).status, 401);
+});
+
+const MODO = (s, id, extra = {}) => s.api('POST', '/admin/instalaciones/modo-real', { token: s.env.ADMIN_TOKEN, body: { id, ...extra } });
+
+test('por defecto todo es pruebas: la puerta global cerrada impide certificado real y modo real', async (t) => {
+  let llamadas = 0;
+  const s = await levantar({ transporte: async () => { llamadas++; return { cuerpo: RESPUESTA_OK() }; } }); t.after(s.cerrar);
+  const A = await s.instalacion(NIF_A);
+  assert.equal(s.db.prepare('SELECT modo_real FROM instalaciones').get().modo_real, 0, 'modo_real por defecto = 0');
+  const est = (await s.api('GET', '/v1/estado', { token: A.token })).json;
+  assert.deepEqual([est.entorno, est.modo_real, est.prod_habilitado], ['test', false, false]);
+  const real = await subirCert(s.api, A.token, generarP12Real(), { entorno: 'prod' });
+  assert.equal(real.status, 403, 'no se puede ni dejar preparado un certificado real');
+  const act = await MODO(s, A.id, { activar: true, confirmacion: `ACTIVAR VERIFACTU REAL ${NIF_A}` });
+  assert.equal(act.status, 403); assert.equal(s.db.prepare('SELECT modo_real FROM instalaciones').get().modo_real, 0);
+  assert.equal((await MODO({ ...s, env: { ADMIN_TOKEN: A.token }, api: s.api }, A.id, { activar: true })).status, 401, 'un token de tenant no activa nada');
+  assert.equal(llamadas, 0);
+});
+
+test('el endpoint lo elige SOLO el check modo_real: en pruebas nunca se envía a producción', async (t) => {
+  const vistos = [];
+  const s = await levantar({ prodHabilitado: true, env: { VERIFACTU_URL_TEST: undefined, VERIFACTU_ENTORNO: 'prod' }, transporte: async (o) => { vistos.push(o); return { cuerpo: RESPUESTA_OK() }; } }); t.after(s.cerrar);
+  const A = await s.instalacion(NIF_A), B = await s.instalacion(NIF_B);
+  await subirCert(s.api, A.token, p12A);
+  // 1) Puerta global ABIERTA y variable de entorno «prod», pero modo_real=0: sigue yendo a pruebas.
+  let r = await s.api('POST', '/v1/registros/alta', { token: A.token, body: { factura: factura(1) } });
+  assert.equal(r.json.registro.estado, 'aceptado');
+  assert.deepEqual([vistos[0].entorno, new URL(vistos[0].url).hostname], ['test', 'prewww10.aeat.es']);
+  assert.match(r.json.registro.qr_url, /^https:\/\/prewww2\.aeat\.es\//);
+
+  // 2) Certificado real preparado + activación con requisitos.
+  assert.equal((await subirCert(s.api, A.token, generarP12({ nif: NIF_A }), { entorno: 'prod' })).status, 422, 'un certificado de pruebas no vale para real');
+  const real = await subirCert(s.api, A.token, generarP12Real(), { entorno: 'prod' });
+  assert.equal(real.status, 201, real.texto); assert.equal(real.json.certificado.entorno, 'prod');
+  assert.equal((await s.api('POST', '/v1/registros/alta', { token: A.token, body: { factura: factura(2) } })).json.registro.estado, 'aceptado');
+  assert.equal(new URL(vistos[1].url).hostname, 'prewww10.aeat.es', 'tener certificado real guardado no cambia el destino');
+
+  assert.equal((await MODO(s, B.id, { activar: true, confirmacion: `ACTIVAR VERIFACTU REAL ${NIF_B}` })).status, 409, 'B no tiene certificado real');
+  assert.equal((await MODO(s, A.id, { activar: true })).status, 422, 'sin confirmación');
+  assert.equal((await MODO(s, A.id, { activar: true, confirmacion: 'si' })).status, 422, 'confirmación incorrecta');
+  assert.equal((await MODO(s, A.id, { activar: true, confirmacion: `ACTIVAR VERIFACTU REAL ${NIF_B}` })).status, 422, 'confirmación de otra empresa');
+  assert.equal(s.db.prepare('SELECT modo_real FROM instalaciones WHERE id=?').get(A.id).modo_real, 0);
+  assert.equal((await MODO(s, A.id, { activar: true, confirmacion: `ACTIVAR VERIFACTU REAL ${NIF_A}` })).status, 200);
+
+  // 3) Con el check activo y solo con él, se usa producción (simulado: ningún socket real) y otro tenant no se ve afectado.
+  r = await s.api('POST', '/v1/registros/alta', { token: A.token, body: { factura: factura(3) } });
+  assert.equal(r.json.registro.entorno, 'prod'); assert.deepEqual([vistos[2].entorno, new URL(vistos[2].url).hostname], ['prod', 'www10.agenciatributaria.gob.es']);
+  assert.match(r.json.registro.qr_url, /^https:\/\/www2\.agenciatributaria\.gob\.es\//);
+  assert.match(vistos[2].xml, /<sf:PrimerRegistro>S<\/sf:PrimerRegistro>/, 'cadena de huellas separada por entorno');
+  await subirCert(s.api, B.token, generarP12({ nif: NIF_B }));
+  await s.api('POST', '/v1/registros/alta', { token: B.token, body: { factura: factura(1) } });
+  assert.equal(new URL(vistos[3].url).hostname, 'prewww10.aeat.es', 'el tenant B sigue en pruebas');
+
+  // 4) Volver a pruebas es inmediato y todo queda auditado.
+  assert.equal((await MODO(s, A.id, { activar: false })).json.modo_real, false);
+  await s.api('POST', '/v1/registros/alta', { token: A.token, body: { factura: factura(4) } });
+  assert.equal(new URL(vistos[4].url).hostname, 'prewww10.aeat.es');
+  assert.deepEqual(s.db.prepare('SELECT accion FROM auditoria WHERE instalacion_id=? ORDER BY id').all(A.id).map((x) => x.accion),
+    ['certificado_alta', 'certificado_alta', 'modo_real_activado', 'modo_real_desactivado']);
 });

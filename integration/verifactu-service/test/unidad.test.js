@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { huellaAlta, importe, mulBp } from '../src/registro.js';
 import { cifrarSecretos, descifrarSecretos, extraerNif, verificarCertificado } from '../src/certificados.js';
-import { entornoActivo, validarDestino, ErrorEntorno } from '../src/entorno.js';
+import { validarDestino, ErrorEntorno } from '../src/entorno.js';
 import { enviarSoap } from '../src/transporte.js';
 
 test('huella: ejemplo oficial 1 de la AEAT (HUE §6)', () => {
@@ -39,8 +39,6 @@ test('verificación: sello válido; ajeno, caducado, usos, representante sin apo
 });
 
 test('producción bloqueada en código y en destino', async () => {
-  assert.throws(() => entornoActivo({ VERIFACTU_ENTORNO: 'prod' }), (e) => e.codigo === 'prod_deshabilitado');
-  assert.throws(() => entornoActivo({ VERIFACTU_ENTORNO: 'otro' }), (e) => e.codigo === 'entorno_invalido');
   for (const u of ['https://www1.agenciatributaria.gob.es/x', 'https://www2.agenciatributaria.gob.es/x', 'https://sub.agenciatributaria.gob.es/x', 'https://WWW10.AgenciaTributaria.gob.es./x'])
     assert.throws(() => validarDestino('test', u), (e) => e.codigo === 'prod_bloqueado_en_test', u);
   assert.throws(() => validarDestino('test', 'https://example.com/x'), (e) => e.codigo === 'fuera_de_lista_blanca');

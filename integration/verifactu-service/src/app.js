@@ -2,12 +2,13 @@
 // Ninguna respuesta incluye el PKCS#12, la contraseña ni la DEK; no se registra ningún cuerpo de petición.
 import http from 'node:http';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { entornoActivo, ErrorEntorno, PROD_HABILITADO } from './entorno.js';
+import { ErrorEntorno, PROD_HABILITADO } from './entorno.js';
 import { TIPOS, claveMaestra, cifrarSecretos, descifrarSecretos, inspeccionarP12, verificarCertificado, ErrorCertificado } from './certificados.js';
 import { construirAlta, construirAnulacion, construirEnvio, leerRespuesta, fechaAEAT } from './registro.js';
 import { enviarSoap } from './transporte.js';
 
 const PATH_SERVICIO = '/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP';
+const HOST_PROD = { sello_empresa: 'www10.agenciatributaria.gob.es', representante: 'www1.agenciatributaria.gob.es', colaborador_social: 'www1.agenciatributaria.gob.es' };
 const HOST_PRUEBAS = { sello_empresa: 'prewww10.aeat.es', representante: 'prewww1.aeat.es', colaborador_social: 'prewww1.aeat.es' };
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 const NIF_RE = /^[A-Z0-9]{9}$/;
@@ -22,12 +23,16 @@ const META_CERT = ['id', 'entorno', 'tipo', 'alias', 'titular_nif', 'titular_nom
 const metaCert = (c, ahora) => c && { ...Object.fromEntries(META_CERT.map((k) => [k, c[k]])), cualificado: !!c.cualificado, autofirmado: !!c.autofirmado, avisos: JSON.parse(c.avisos),
   vigente: c.estado === 'activo' && new Date(c.valido_desde) <= ahora && new Date(c.valido_hasta) > ahora, dias_restantes: Math.max(0, Math.floor((new Date(c.valido_hasta) - ahora) / 864e5)) };
 
-export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora = () => new Date() }) {
+// prodHabilitado: puerta global (código, entorno.js). Solo las pruebas la inyectan; en ejecución real vale PROD_HABILITADO.
+export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora = () => new Date(), prodHabilitado = PROD_HABILITADO }) {
   const q = (sql, ...p) => db.prepare(sql).get(...p);
   const qa = (sql, ...p) => db.prepare(sql).all(...p);
   const run = (sql, ...p) => db.prepare(sql).run(...p);
 
-  const qrUrl = (nif, r) => `https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=${encodeURIComponent(nif)}&numserie=${encodeURIComponent(r.numserie)}&fecha=${r.fecha}&importe=${r.importe}`; // solo pruebas
+  // ÚNICO selector de entorno: el check modo_real del tenant (por defecto 0 = pruebas). Nada más decide el endpoint.
+  const entornoDe = (inst) => (inst.modo_real ? 'prod' : 'test');
+  const audit = (inst, accion, detalle = null) => run('INSERT INTO auditoria(instalacion_id,accion,detalle,created_at) VALUES (?,?,?,?)', inst.id, accion, detalle, ahora().toISOString());
+  const qrUrl = (nif, r) => `https://${r.entorno === 'prod' ? 'www2.agenciatributaria.gob.es' : 'prewww2.aeat.es'}/wlpl/TIKE-CONT/ValidarQR?nif=${encodeURIComponent(nif)}&numserie=${encodeURIComponent(r.numserie)}&fecha=${r.fecha}&importe=${r.importe}`;
   const vista = (inst, r) => ({ id: r.id, tipo: r.tipo, subsanacion: !!r.subsanacion, numserie: r.numserie, fecha: r.fecha, estado: r.estado, huella: r.huella, csv: r.csv, codigo: r.resp_codigo,
     mensaje: r.resp_texto, importe: r.importe, entorno: r.entorno, ...(r.tipo === 'alta' ? { qr_url: qrUrl(inst.nif, r) } : {}), created_at: r.created_at });
 
@@ -56,11 +61,11 @@ export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora
     const kek = claveMaestra(env);
     const rep = cert.tipo === 'sello_empresa' ? null : { nombre: cert.titular_nombre, nif: cert.titular_nif };
     const cuerpo = construirEnvio({ obligado: { nif: inst.nif, nombre: inst.nombre_empresa }, registros: [reg.xml], representante: rep });
-    const url = env.VERIFACTU_URL_TEST || `https://${HOST_PRUEBAS[cert.tipo]}${PATH_SERVICIO}`;
+    const url = entorno === 'prod' ? `https://${HOST_PROD[cert.tipo]}${PATH_SERVICIO}` : (env.VERIFACTU_URL_TEST || `https://${HOST_PRUEBAS[cert.tipo]}${PATH_SERVICIO}`);
     let estado = 'error', codigo = null, texto = null, csv = null;
     try {
       const secretos = descifrarSecretos({ ...cert, aad: `${cert.id}:${inst.id}`, kek });
-      const r = await transporte({ entorno, url, xml: cuerpo, cert: secretos, motor: env.VERIFACTU_CA_TEST ? { ca: env.VERIFACTU_CA_TEST } : null });
+      const r = await transporte({ entorno, url, xml: cuerpo, cert: secretos, motor: entorno === 'test' && env.VERIFACTU_CA_TEST ? { ca: env.VERIFACTU_CA_TEST } : null, prodHabilitado });
       const l = leerRespuesta(r.cuerpo);
       if (l.fault) { codigo = 'fault'; texto = `${l.codigo ?? ''} ${l.mensaje ?? ''}`.trim(); }
       else {
@@ -122,14 +127,32 @@ export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora
       return [200, { token }];
     },
 
+    // Interruptor de modo real POR TENANT (sin cambios de código ni de esquema). Activar exige: puerta global abierta, certificado NO de pruebas, vigente y cualificado en entorno prod,
+    // y confirmación literal. Volver a pruebas es siempre posible. Todo queda en auditoria.
+    'POST /admin/instalaciones/modo-real': async (req, body) => {
+      esAdmin(req);
+      const inst = q('SELECT * FROM instalaciones WHERE id=? AND activa=1', txt(body.id, 60, 'id'));
+      exige(inst, 404, 'No existe');
+      if (body.activar !== true) { run('UPDATE instalaciones SET modo_real=0 WHERE id=?', inst.id); audit(inst, 'modo_real_desactivado'); return [200, { modo_real: false }]; }
+      exige(prodHabilitado, 403, 'Producción deshabilitada: requiere autorización expresa del OWNER (puerta global)');
+      exige(body.confirmacion === `ACTIVAR VERIFACTU REAL ${inst.nif}`, 422, 'Confirmación explícita incorrecta');
+      const c = certActivo(inst, 'prod');
+      exige(c, 409, 'No hay un certificado real activo y vigente (entorno prod)');
+      exige(c.cualificado && !c.autofirmado, 409, 'El certificado no es cualificado');
+      run('UPDATE instalaciones SET modo_real=1 WHERE id=?', inst.id); audit(inst, 'modo_real_activado', c.huella_sha256.slice(0, 12));
+      return [200, { modo_real: true }];
+    },
+
     'GET /v1/estado': async (req) => {
-      const inst = autenticar(req), entorno = entornoActivo(env);
+      const inst = autenticar(req), entorno = entornoDe(inst);
       const c = q("SELECT * FROM certificados WHERE instalacion_id=? AND entorno=? AND estado='activo'", inst.id, entorno);
-      return [200, { entorno, prod_habilitado: PROD_HABILITADO, empresa: { nif: inst.nif, nombre: inst.nombre_empresa }, certificado: metaCert(c, ahora()) ?? null }];
+      return [200, { entorno, modo_real: !!inst.modo_real, prod_habilitado: prodHabilitado, empresa: { nif: inst.nif, nombre: inst.nombre_empresa }, certificado: metaCert(c, ahora()) ?? null }];
     },
     // Alta: se inspecciona y verifica ANTES de guardar. Sustituye al certificado activo anterior (revocado) en una sola transacción.
     'PUT /v1/certificado': async (req, body) => {
-      const inst = autenticar(req), entorno = entornoActivo(env); // en prod lanza prod_deshabilitado
+      const inst = autenticar(req), entorno = body.entorno ?? entornoDe(inst); // un certificado real se puede dejar preparado (entorno 'prod') antes de activar el modo real
+      exige(['test', 'prod'].includes(entorno), 422, 'Entorno no válido');
+      if (entorno === 'prod') exige(prodHabilitado, 403, 'Producción deshabilitada');
       const tipo = body.tipo; exige(TIPOS.includes(tipo), 422, 'Tipo de certificado no válido');
       exige(typeof body.p12_base64 === 'string' && body.p12_base64.length > 100 && body.p12_base64.length < 90_000, 422, 'Certificado PKCS#12 no válido');
       exige(typeof body.passphrase === 'string' && body.passphrase.length >= 1 && body.passphrase.length <= 200, 422, 'Indica la contraseña');
@@ -140,6 +163,7 @@ export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora
       const info = await inspeccionarP12(p12, body.passphrase);
       const v = verificarCertificado(info, { empresa: { nif: inst.nif }, tipo, entorno, apoderamiento: ap, ahora: ahora() });
       if (!v.ok) throw new Http(422, 'El certificado no es válido para esta empresa y entorno', { problemas: v.problemas, avisos: v.avisos });
+      audit(inst, 'certificado_alta', `${entorno} ${tipo} ${info.huella_sha256.slice(0, 12)}`);
       const id = randomUUID(), s = cifrarSecretos({ p12, passphrase: body.passphrase, aad: `${id}:${inst.id}`, kek });
       const cn = (info.sujeto.split('\n').find((x) => x.startsWith('CN=')) ?? '').replace(/^CN=/, '').slice(0, 120);
       db.exec('BEGIN');
@@ -154,12 +178,13 @@ export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora
       return [201, { certificado: metaCert(q('SELECT * FROM certificados WHERE id=?', id), ahora()) }];
     },
     'DELETE /v1/certificado': async (req) => {
-      const inst = autenticar(req), entorno = entornoActivo(env);
+      const inst = autenticar(req), entorno = entornoDe(inst);
+      audit(inst, 'certificado_revocado', entorno);
       return [200, { revocados: run("UPDATE certificados SET estado='revocado' WHERE instalacion_id=? AND entorno=? AND estado='activo'", inst.id, entorno).changes }];
     },
 
     'POST /v1/registros/alta': async (req, body) => {
-      const inst = autenticar(req), entorno = entornoActivo(env), f = leerFactura(body.factura), sub = body.subsanacion === true, fecha = fechaAEAT(f.fecha);
+      const inst = autenticar(req), entorno = entornoDe(inst), f = leerFactura(body.factura), sub = body.subsanacion === true, fecha = fechaAEAT(f.fecha);
       const previo = q("SELECT * FROM registros WHERE instalacion_id=? AND entorno=? AND tipo='alta' AND numserie=? AND fecha=? AND subsanacion=0", inst.id, entorno, f.numserie, fecha);
       if (!sub && previo) { // idempotente: se reenvía el MISMO XML salvo que ya esté aceptado
         const r = previo.estado === 'aceptado' ? previo : await remitir(inst, entorno, previo);
@@ -173,7 +198,7 @@ export function crearApp({ db, env = process.env, transporte = enviarSoap, ahora
       return [201, { registro: vista(inst, await remitir(inst, entorno, { id, xml: a.xml })) }];
     },
     'POST /v1/registros/anulacion': async (req, body) => {
-      const inst = autenticar(req), entorno = entornoActivo(env), f = fechaYSerie(body.factura), fecha = fechaAEAT(f.fecha);
+      const inst = autenticar(req), entorno = entornoDe(inst), f = fechaYSerie(body.factura), fecha = fechaAEAT(f.fecha);
       exige(q("SELECT 1 AS x FROM registros WHERE instalacion_id=? AND entorno=? AND tipo='alta' AND numserie=? AND fecha=?", inst.id, entorno, f.numserie, fecha), 409, 'No existe un alta de esa factura que anular');
       const previo = q("SELECT * FROM registros WHERE instalacion_id=? AND entorno=? AND tipo='anulacion' AND numserie=? AND fecha=?", inst.id, entorno, f.numserie, fecha);
       if (previo) return [200, { registro: vista(inst, previo.estado === 'aceptado' ? previo : await remitir(inst, entorno, previo)), repetido: true }];

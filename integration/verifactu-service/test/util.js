@@ -1,6 +1,6 @@
 // Utilidades de prueba: certificados de PRUEBA generados con openssl (nunca reales), simulado local de la AEAT y cliente HTTP.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -20,6 +20,21 @@ export function generarP12({ nif = NIF_A, cn = 'Empresa Prueba SL', desde, hasta
     execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', f('k.pem'), '-out', f('c.pem'), '-subj', `/serialNumber=IDCES-${nif}/CN=${cn}`,
       ...fechas, '-addext', `keyUsage=${ku}`, '-addext', `extendedKeyUsage=${eku}`], { stdio: 'ignore' });
     execFileSync('openssl', ['pkcs12', '-export', '-inkey', f('k.pem'), '-in', f('c.pem'), '-out', f('c.p12'), '-passout', `pass:${pass}`], { stdio: 'ignore' });
+    return readFileSync(f('c.p12'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
+// Certificado «real» FICTICIO para probar el camino de modo real: firmado por una CA local (no autofirmado), sin la palabra prueba/test y con el OID de QcCompliance (0.4.0.1862.1.1)
+// dentro de una extensión cualquiera: es el marcador que busca inspeccionarP12 para considerarlo cualificado. Nunca es un certificado de la FNMT ni válido ante la AEAT.
+export function generarP12Real({ nif = NIF_A, cn = 'Empresa Real SL', pass = PASS } = {}) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'vf-real-'));
+  try {
+    const f = (n) => path.join(dir, n), sh = (a) => execFileSync('openssl', a, { stdio: 'ignore' });
+    sh(['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', f('ca.key'), '-out', f('ca.pem'), '-subj', '/CN=CA Ficticia Real', '-days', '60']);
+    sh(['req', '-newkey', 'rsa:2048', '-nodes', '-keyout', f('k.pem'), '-out', f('c.csr'), '-subj', `/serialNumber=IDCES-${nif}/CN=${cn}`]);
+    writeFileSync(f('ext.cnf'), 'keyUsage=digitalSignature\nextendedKeyUsage=clientAuth\n1.2.3.4=DER:06:04:00:8e:46:01:01\n');
+    sh(['x509', '-req', '-in', f('c.csr'), '-CA', f('ca.pem'), '-CAkey', f('ca.key'), '-CAcreateserial', '-out', f('c.pem'), '-days', '30', '-extfile', f('ext.cnf')]);
+    sh(['pkcs12', '-export', '-inkey', f('k.pem'), '-in', f('c.pem'), '-out', f('c.p12'), '-passout', `pass:${pass}`]);
     return readFileSync(f('c.p12'));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
@@ -45,11 +60,11 @@ export async function simulado() {
 }
 
 // Arranca el servicio con BD en memoria. `entorno` y `ahora` se pueden forzar.
-export async function levantar({ env = {}, transporte, ahora } = {}) {
+export async function levantar({ env = {}, transporte, ahora, prodHabilitado } = {}) {
   const sim = await simulado();
-  const e = { VERIFACTU_ENTORNO: 'test', CERT_MASTER_KEY: randomBytes(32).toString('base64'), ADMIN_TOKEN: 'admin-token-de-prueba-0123456789', VERIFACTU_URL_TEST: sim.url, ...env };
+  const e = { CERT_MASTER_KEY: randomBytes(32).toString('base64'), ADMIN_TOKEN: 'admin-token-de-prueba-0123456789', VERIFACTU_URL_TEST: sim.url, ...env };
   const db = abrirDb();
-  const server = crearApp({ db, env: e, ...(transporte ? { transporte } : {}), ...(ahora ? { ahora } : {}) });
+  const server = crearApp({ db, env: e, ...(transporte ? { transporte } : {}), ...(ahora ? { ahora } : {}), ...(prodHabilitado !== undefined ? { prodHabilitado } : {}) });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const api = async (metodo, ruta, { token, body } = {}) => {

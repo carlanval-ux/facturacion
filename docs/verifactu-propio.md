@@ -25,8 +25,9 @@ solo lee metadatos. El servicio deduce el tenant del token; el cuerpo nunca elig
 |---|---|---|
 | `POST /admin/instalaciones` `{nombre, nif, nombre_empresa}` | `ADMIN_TOKEN` | Crea instalación; devuelve `{id, nif, token}` (el token se ve **una vez**; en BD solo su SHA-256) |
 | `POST /admin/instalaciones/desactivar` `{id}` | `ADMIN_TOKEN` | El token deja de valer |
-| `GET /v1/estado` | instalación | `{entorno, prod_habilitado, empresa, certificado\|null}` |
-| `POST /v1/certificado` (alias `PUT`) `{tipo, alias, p12_base64, passphrase, apoderamiento?, nif_empresa?}` | instalación | Inspecciona, **verifica antes de guardar**, cifra y sustituye al activo. 201 con metadatos / 422 `{problemas, avisos}` / 409 NIF distinto / 403 prod |
+| `POST /admin/instalaciones/modo-real` `{id, activar, confirmacion}` | `ADMIN_TOKEN` | **Interruptor de modo real por tenant** (`modo_real`, por defecto 0). Activar exige: puerta global abierta, certificado real (no de pruebas, vigente, cualificado, no autofirmado) guardado en entorno `prod`, y `confirmacion` = `ACTIVAR VERIFACTU REAL <NIF>`. Desactivar siempre posible. Ambos quedan en la tabla `auditoria` |
+| `GET /v1/estado` | instalación | `{entorno, modo_real, prod_habilitado, empresa, certificado\|null}` (el certificado es el del entorno vigente) |
+| `POST /v1/certificado` (alias `PUT`) `{tipo, alias, p12_base64, passphrase, apoderamiento?, nif_empresa?, entorno?}` (`entorno:'prod'` deja preparado un certificado real; solo con la puerta global abierta) | instalación | Inspecciona, **verifica antes de guardar**, cifra y sustituye al activo. 201 con metadatos / 422 `{problemas, avisos}` / 409 NIF distinto / 403 prod |
 | `POST /v1/certificado/revocar` (alias `DELETE /v1/certificado`) | instalación | Revoca el activo |
 | `POST /v1/registros/alta` `{factura:{numserie, fecha:AAAA-MM-DD, tipo:F1\|F2, descripcion?, destinatario?, lineas:[{base_cent, iva_bp}]}, subsanacion?:bool}` | instalación | Genera registro encadenado y lo remite. Idempotente por (numserie, fecha): reenvía el mismo XML salvo que ya esté aceptado |
 | `POST /v1/registros/anulacion` `{factura:{numserie, fecha}}` | instalación | Registro de anulación; exige alta previa |
@@ -59,9 +60,13 @@ Respuestas **nunca** contienen PKCS#12, contraseña ni DEK; los errores 500 no d
 | Fuga por API/log | Solo metadatos; no se registran cuerpos; openssl recibe la contraseña por variable de entorno (no argv) y el PKCS#12 en directorio temporal 0700 borrado siempre. |
 | Cruce de tenants | Tenant solo del token; todas las consultas filtran `instalacion_id`; tests: B no ve ni usa el certificado de A. Instalación desactivable. |
 | Certificado ajeno/caducado/de otra empresa/sin usos | Verificación previa al guardado y re-comprobación de vigencia al remitir; tests negativos. |
-| Remisión real accidental | `PROD_HABILITADO = false` **en código** (no variable de entorno); `VERIFACTU_ENTORNO=prod` aborta el arranque y devuelve 403; en TEST, lista blanca (`prewww*.aeat.es`, loopback/`.test`) + lista negra de `agenciatributaria.gob.es` y subdominios; sin redirecciones; validación antes de abrir socket. Activarlo exige cambio de código revisado y autorización expresa del OWNER. |
+| Remisión real accidental | Dos llaves: (1) puerta global `PROD_HABILITADO = false` **en código** (`entorno.js`; sin ella no se puede ni guardar un certificado real ni activar el modo real, y `validarDestino('prod')` rechaza); (2) check `modo_real` **por tenant** (defecto 0), que es el **único** selector del endpoint (`entornoDe`): ninguna variable de entorno ni la mera presencia de un certificado real lo cambia (test). En TEST, lista blanca (`prewww*.aeat.es`, loopback/`.test`) + lista negra de `agenciatributaria.gob.es` y subdominios; sin redirecciones; validación antes de abrir socket. Activarlo exige cambio de código revisado y autorización expresa del OWNER. |
 | Token de instalación robado | Token de 256 bits, solo su hash en BD, desactivable; el servicio escucha en 127.0.0.1 por defecto (poner detrás de TLS). |
 | Apoderamiento falso | Es una declaración: el servicio avisa «NO verificable sin conexión»; solo la AEAT lo confirma. |
+
+### Pasar a real
+
+Por tenant es **un ajuste** (`modo-real`), sin cambios de código ni de esquema. La puerta global (llave 1) sigue cerrada y abrirla es una línea revisada con autorización expresa del OWNER y validación normativa: es la única parte que exige código, a propósito. Hasta entonces `modo-real` responde 403.
 
 ## 6. Límites conocidos (no ocultos)
 
@@ -75,8 +80,8 @@ Respuestas **nunca** contienen PKCS#12, contraseña ni DEK; los errores 500 no d
 ## 7. Operación
 
 ```
-CERT_MASTER_KEY=$(openssl rand -base64 32) ADMIN_TOKEN=<≥20 car.> VERIFACTU_ENTORNO=test DB_PATH=./verifactu.sqlite node src/server.js
+CERT_MASTER_KEY=$(openssl rand -base64 32) ADMIN_TOKEN=<≥20 car.> DB_PATH=./verifactu.sqlite node src/server.js
 cd integration/verifactu-service && npm test      # Node ≥ 22.13, openssl en PATH
 ```
 
-Variables: `PORT`, `HOST`, `VERIFACTU_URL_TEST` (simulado), `VERIFACTU_CA_TEST`, `SISTEMA_NIF`. Perder `CERT_MASTER_KEY` inutiliza todos los certificados guardados (hay que volver a subirlos).
+Variables: `PORT`, `HOST`, `VERIFACTU_URL_TEST` (simulado; solo se usa en modo pruebas), `VERIFACTU_CA_TEST`, `SISTEMA_NIF`. Perder `CERT_MASTER_KEY` inutiliza todos los certificados guardados (hay que volver a subirlos).

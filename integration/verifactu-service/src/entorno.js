@@ -24,18 +24,8 @@ export const normalizarHost = (hostname) => String(hostname).toLowerCase().repla
 const esProd = (h) => HOSTS_PROD.includes(h) || SUFIJOS_PROD.some((s) => h === s || h.endsWith(`.${s}`));
 const esSimulado = (h) => LOOPBACK.has(h) || h.endsWith('.localhost') || h.endsWith('.test');
 
-export function entornoActivo(env = process.env) {
-  const v = String(env.VERIFACTU_ENTORNO ?? 'test').trim().toLowerCase();
-  if (v === 'test') return 'test';
-  if (v === 'prod') {
-    if (!PROD_HABILITADO) throw new ErrorEntorno('VERI*FACTU de producción deshabilitado: requiere validación normativa y autorización expresa del OWNER', 'prod_deshabilitado');
-    return 'prod';
-  }
-  throw new ErrorEntorno(`VERIFACTU_ENTORNO no válido: ${v}`, 'entorno_invalido');
-}
-
 // Valida un destino SIN abrir ningún socket. Devuelve la URL normalizada o lanza ErrorEntorno.
-export function validarDestino(entorno, destino) {
+export function validarDestino(entorno, destino, prodHabilitado = PROD_HABILITADO) { // prodHabilitado solo se inyecta en pruebas
   let u;
   try { u = new URL(destino); } catch { throw new ErrorEntorno('URL de destino no válida', 'url_invalida'); }
   if (u.username || u.password) throw new ErrorEntorno('La URL de destino no admite credenciales', 'url_credenciales');
@@ -47,7 +37,7 @@ export function validarDestino(entorno, destino) {
     return u;
   }
   if (entorno === 'prod') {
-    if (!PROD_HABILITADO) throw new ErrorEntorno('Producción deshabilitada', 'prod_deshabilitado');
+    if (!prodHabilitado) throw new ErrorEntorno('Producción deshabilitada', 'prod_deshabilitado');
     if (!HOSTS_PROD.includes(host) || u.protocol !== 'https:') throw new ErrorEntorno('Destino de producción no reconocido', 'destino_prod');
     return u;
   }
