@@ -3,7 +3,7 @@
 Módulo comercial `cobros` (5 €/mes). Plugin propio, clean-room. Se activa con `ModuloActivo::estaActivo('cobros')`; mientras esa clase no exista lee el ajuste `facturalo` → `modulos.cobros` (activo por defecto si no está definido). Inactivo: no aparecen botones y los controladores se niegan.
 
 ## Qué hace
-- **Marcar como cobrada**: botón en el listado de facturas, en su pestaña de recibos y en la ficha de la factura. Abre la ventana *Cobrar* (`CobrarFacturas`): fecha (hoy, no futura), forma de pago, cuenta bancaria opcional, observación.
+- **Marcar como cobrada**: botón en el listado de facturas, en su pestaña de recibos y en la pestaña de recibos de la ficha de la factura (la cabecera del documento no admite botones de acción). Abre la ventana *Cobrar* (`CobrarFacturas`): fecha (hoy, no futura), forma de pago, cuenta bancaria opcional, observación.
 - **Lote**: facturas/recibos de uno o varios clientes en una sola operación (mismo método y fecha). Por fila se edita el importe a cobrar, o se indica un **total** que se reparte por vencimiento. Todo o nada (transacción).
 - **Parcial**: si se cobra menos que el recibo, este queda por lo cobrado y se crea otro recibo pendiente por el resto (mismo vencimiento). No se puede cobrar más de lo pendiente.
 - **Anular cobro**: *Ventas → Registro de cobros*, seleccionar, motivo obligatorio. El recibo vuelve a pendiente; FS genera su pago de reversión y la factura queda impagada. No se anula si el recibo cambió después.
