@@ -28,6 +28,8 @@ final class Init extends InitClass
         // una sola empresa por tenant (se puede levantar con el ajuste facturalo.multiempresa=1)
         $this->loadExtension(new Extension\Model\Empresa());
         $this->loadExtension(new Extension\Controller\ListEmpresa());
+        // «Nueva cuenta» desde el desplegable de cuenta bancaria de Formas de pago
+        $this->loadExtension(new Extension\Controller\EditFormaPago());
         // la API (activarla y sus claves) solo la ve el staff de plataforma
         $this->loadExtension(new Extension\Controller\EditSettings());
         // identidad visual (se carga tras el CSS del nucleo)
