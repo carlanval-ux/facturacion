@@ -35,7 +35,7 @@ echo "--- systemd-analyze security (exposicion de la unidad) ---"
 systemd-analyze security fs-master-agent.service --no-pager 2>&1 | tail -3 || info "systemd-analyze no disponible"
 
 echo "--- peticion status firmada (slug de prueba zz-verif) ---"
-if [[ -n "$(ls -A "$Q/requests" "$Q/responses" 2>/dev/null)" ]]; then
+if [[ -n "$(ls -A "$Q/requests" 2>/dev/null)$(ls -A "$Q/responses" 2>/dev/null)" ]]; then
   ko "la cola no esta vacia: no se prueba (puede haber peticiones reales)"
 else
   ID="$(php -r '$a="0123456789ABCDEFGHJKMNPQRSTVWXYZ";$s="";for($i=0;$i<26;$i++)$s.=$a[random_int(0,31)];echo $s;')"
