@@ -314,7 +314,7 @@ final class Agent
             case 'company':
                 $c = $x['req']['tenant']['company'];
                 $h->sql($x['db'], 'UPDATE empresas SET nombre = ?, nombrecorto = ?, cifnif = ?, direccion = ?, ciudad = ?, provincia = ?, codpostal = ?, email = ? WHERE idempresa = 1',
-                    [$x['req']['tenant']['trade_name'], preg_replace('/^(.{0,32}).*$/us', '$1', $x['req']['tenant']['trade_name']), $c['cifnif'], $c['direccion'], $c['ciudad'], $c['provincia'], $c['codpostal'], $c['email'] ?? '']);
+                    [$x['req']['tenant']['legal_name'], preg_replace('/^(.{0,32}).*$/us', '$1', $x['req']['tenant']['trade_name']), $c['cifnif'], $c['direccion'], $c['ciudad'], $c['provincia'], $c['codpostal'], $c['email'] ?? '']);
                 $this->clearCache($slug);
                 return ['detail' => 'datos de la empresa cargados'];
             case 'email':

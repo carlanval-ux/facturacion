@@ -127,7 +127,7 @@ function validate_request(array $r, int $now, string $fileId): array
         $e[] = 'tenant requerido';
         return $e;
     }
-    $tallowed = $action === 'provision' ? ['id', 'slug', 'hostname', 'trade_name', 'admin_email', 'company'] : ['id', 'slug', 'hostname'];
+    $tallowed = $action === 'provision' ? ['id', 'slug', 'hostname', 'trade_name', 'legal_name', 'admin_email', 'company'] : ['id', 'slug', 'hostname'];
     if ($x = array_diff(array_keys($tn), $tallowed)) {
         $e[] = 'tenant: campos no permitidos para ' . $action . ': ' . implode(',', $x);
     }
@@ -142,6 +142,9 @@ function validate_request(array $r, int $now, string $fileId): array
     if ($action === 'provision') {
         if (!text_ok($tn['trade_name'] ?? null, 100)) {
             $e[] = 'trade_name invalido';
+        }
+        if ($m = legal_name_error($tn['legal_name'] ?? null)) {
+            $e[] = $m;
         }
         if (!is_string($tn['admin_email'] ?? null) || !preg_match('/\A[A-Za-z0-9._%+-]{1,64}@([a-z0-9-]+\.)+[a-z]{2,63}\z/', $tn['admin_email'])) {
             $e[] = 'admin_email invalido';
@@ -295,4 +298,16 @@ function email_template_errors(?string $json): array
         $e[] = 'plantilla de correo: port invalido';
     }
     return $e;
+}
+
+/** Razon social CENSAL (la que valida la AEAT contra NIF): en mayusculas como en el censo/certificado, p.ej. "APELLIDOS NOMBRE" o "ACME SOCIEDAD LIMITADA". Distinta del nombre comercial. */
+function legal_name_error(mixed $v): ?string
+{
+    if (!is_string($v) || $v === '' || strlen($v) > 100) {
+        return 'legal_name: razon social censal obligatoria (1-100 caracteres), distinta del nombre comercial';
+    }
+    if (!text_ok($v, 100) || preg_match('/\s{2,}/', $v) || !preg_match('/\A[\p{Lu}\p{N}][\p{Lu}\p{N} .,&\'\/()ºª-]*\z/u', $v) || preg_match('/\p{Ll}/u', $v)) {
+        return 'legal_name: solo mayusculas (como en el censo/certificado), digitos y . , & \' / ( ) - ; sin minusculas ni espacios dobles';
+    }
+    return null;
 }
