@@ -1,0 +1,41 @@
+{% set d = fsc.views['VerifactuFactura'].cursor[0] %}
+<div class="card shadow mb-3">
+    <div class="card-body">
+        <h5 class="card-title"><i class="fa-solid fa-file-shield fa-fw"></i> Verifactu — modo PRUEBAS (sin efectos fiscales)</h5>
+        {% if not d.configurado %}
+            <div class="alert alert-warning mb-0">Servicio no configurado (FS_VERIFACTU_URL y FS_VERIFACTU_TOKEN en config.php).</div>
+        {% elseif d.error %}
+            <div class="alert alert-danger mb-0">{{ d.error }}</div>
+        {% else %}
+            <div class="row">
+                <div class="col-md-9">
+                    {% if d.registros is empty %}
+                        <p class="text-muted">Esta factura no tiene registros Verifactu.</p>
+                    {% else %}
+                        <table class="table table-sm">
+                            <thead><tr><th>Registro</th><th>Estado</th><th>CSV</th><th>Huella</th><th>Mensaje</th></tr></thead>
+                            <tbody>
+                            {% for r in d.registros %}
+                                <tr><td>{{ r.tipo }}{{ r.subsanacion ? ' (subsanación)' : '' }}</td><td>{{ r.estado }}</td><td>{{ r.csv }}</td><td><code>{{ r.huella | slice(0, 12) }}…</code></td><td>{{ r.mensaje }}</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    {% endif %}
+                    <form action="" method="post" class="d-flex gap-2">
+                        {{ formToken() }}
+                        <input type="hidden" name="activetab" value="VerifactuFactura"/>
+                        <button type="submit" name="action" value="verifactu-alta" class="btn btn-sm btn-primary">Registrar alta</button>
+                        <button type="submit" name="action" value="verifactu-subsanar" class="btn btn-sm btn-outline-secondary">Subsanar</button>
+                        <button type="submit" name="action" value="verifactu-anular" class="btn btn-sm btn-outline-danger">Anular</button>
+                    </form>
+                </div>
+                {% if d.qr %}
+                    <div class="col-md-3 text-center">
+                        <img src="{{ d.qr.png }}" alt="QR de verificación (pruebas)" class="img-fluid"/>
+                        <div class="small mt-1"><a href="{{ d.qr.url }}" target="_blank" rel="noopener noreferrer">Cotejar en la AEAT (pruebas)</a></div>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>

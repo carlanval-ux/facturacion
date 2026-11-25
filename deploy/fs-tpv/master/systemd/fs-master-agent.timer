@@ -1,0 +1,10 @@
+[Unit]
+Description=Sondea la cola MASTER de Facturalo cada 30 s
+
+[Timer]
+OnBootSec=60
+OnUnitInactiveSec=30
+AccuracySec=5
+
+[Install]
+WantedBy=timers.target

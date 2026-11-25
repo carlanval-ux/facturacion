@@ -1,0 +1,1108 @@
+<?php
+/**
+ * This file is part of Informes plugin for FacturaScripts
+ * Copyright (C) 2022-2026 Carlos Garcia Gomez <carlos@facturascripts.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+namespace FacturaScripts\Plugins\Informes\Controller;
+
+use FacturaScripts\Core\DataSrc\Empresas;
+use FacturaScripts\Core\Template\Controller;
+use FacturaScripts\Core\Tools;
+use FacturaScripts\Core\Where;
+use FacturaScripts\Dinamic\Lib\ExportManager;
+use FacturaScripts\Dinamic\Model\AlbaranCliente;
+use FacturaScripts\Dinamic\Model\AlbaranProveedor;
+use FacturaScripts\Dinamic\Model\Almacen;
+use FacturaScripts\Dinamic\Model\Cliente;
+use FacturaScripts\Dinamic\Model\CodeModel;
+use FacturaScripts\Dinamic\Model\Contacto;
+use FacturaScripts\Dinamic\Model\Familia;
+use FacturaScripts\Dinamic\Model\FacturaCliente;
+use FacturaScripts\Dinamic\Model\FacturaProveedor;
+use FacturaScripts\Dinamic\Model\FormaPago;
+use FacturaScripts\Dinamic\Model\Producto;
+use FacturaScripts\Dinamic\Model\Proveedor;
+use FacturaScripts\Dinamic\Model\Variante;
+
+/**
+ * @author Daniel Fernández Giménez <contacto@danielfg.es>
+ */
+class ReportBreakdown extends Controller
+{
+    /** @var Contacto */
+    public $billingAddress;
+
+    /** @var Cliente */
+    public $cliente;
+
+    /** @var string */
+    public $codagente;
+
+    /** @var string */
+    public $codalmacen;
+
+    /** @var string */
+    public $coddivisa;
+
+    /** @var string */
+    public $codpais;
+
+    /** @var string */
+    public $codpago;
+
+    /** @var string */
+    public $codserie;
+
+    /** @var array */
+    public $data;
+
+    /** @var string */
+    public $desde;
+
+    /** @var Familia */
+    public $family;
+
+    /** @var string */
+    public $format = 'screen';
+
+    /** @var string */
+    public $generar = 'informe_ventas';
+
+    /** @var string */
+    public $hasta;
+
+    /** @var int */
+    public $idempresa;
+
+    /** @var Proveedor */
+    public $proveedor;
+
+    /** @var string */
+    public $provincia;
+
+    /** @var float */
+    public $purchase_minimo;
+
+    /** @var float */
+    public $sale_minimo;
+
+    /** @var Contacto */
+    public $shippingAddress;
+
+    /** @var string */
+    public $type = 'invoices';
+
+    /** @var Variante */
+    public $variant;
+
+    /** @var array */
+    private $urlCustomerCache = [];
+
+    /** @var array */
+    private $urlDocumentCache = [];
+
+    /** @var array */
+    private $urlProductCache = [];
+
+    public function getAddress(?Contacto $contacto): string
+    {
+        if (null === $contacto || empty($contacto->id())) {
+            return '';
+        }
+
+        $description = empty($contacto->descripcion) ? '(' . Tools::trans('empty') . ') ' : '(' . $contacto->descripcion . ') ';
+        $description .= empty($contacto->direccion) ? '' : $contacto->direccion;
+        return $description;
+    }
+
+    public function getPageData(): array
+    {
+        $data = parent::getPageData();
+        $data["menu"] = "reports";
+        $data["title"] = "report-breakdown";
+        $data["icon"] = "fa-solid fa-braille";
+        return $data;
+    }
+
+    public function getSelectValues($table, $code, $description, $empty = false): array
+    {
+        $values = $empty ? ['' => '------'] : [];
+        foreach (CodeModel::all($table, $code, $description, $empty) as $row) {
+            $values[$row->code] = $row->description;
+        }
+        return $values;
+    }
+
+    public function getUrlCustomer(string $customerName): string
+    {
+        // memoizamos por nombre para evitar recargar el mismo cliente en cada fila
+        if (array_key_exists($customerName, $this->urlCustomerCache)) {
+            return $this->urlCustomerCache[$customerName];
+        }
+
+        $customer = new Cliente();
+        $customerNameArr = explode(' | ', $customerName);
+        if (!empty($customerNameArr[0]) && $customer->load($customerNameArr[0])) {
+            $html = '<a href="' . $customer->url() . '" target="_blank">' . $customerName . '</a>';
+        } else {
+            $html = $customerName;
+        }
+
+        return $this->urlCustomerCache[$customerName] = $html;
+    }
+
+    public function getUrlDocument(string $codigo): string
+    {
+        // memoizamos por código para evitar recargar el mismo documento en cada fila
+        if (array_key_exists($codigo, $this->urlDocumentCache)) {
+            return $this->urlDocumentCache[$codigo];
+        }
+
+        $isVentas = $this->generar === 'informe_ventas';
+        if ($isVentas && $this->type === 'invoices') {
+            $document = new FacturaCliente();
+        } elseif ($isVentas && $this->type === 'delivery-notes') {
+            $document = new AlbaranCliente();
+        } elseif (!$isVentas && $this->type === 'invoices') {
+            $document = new FacturaProveedor();
+        } elseif (!$isVentas && $this->type === 'delivery-notes') {
+            $document = new AlbaranProveedor();
+        } else {
+            return $this->urlDocumentCache[$codigo] = $codigo;
+        }
+
+        $where = [Where::eq('codigo', $codigo)];
+        if ($document->loadWhere($where)) {
+            $html = '<a href="' . $document->url() . '" target="_blank">' . $codigo . '</a>';
+        } else {
+            $html = $codigo;
+        }
+
+        return $this->urlDocumentCache[$codigo] = $html;
+    }
+
+    public function getUrlProduct(string $referencia): string
+    {
+        // memoizamos por referencia para evitar recargar la misma variante en cada fila
+        if (array_key_exists($referencia, $this->urlProductCache)) {
+            return $this->urlProductCache[$referencia];
+        }
+
+        $variant = new Variante();
+        $where = [Where::eq('referencia', $referencia)];
+        if ($variant->loadWhere($where)) {
+            return $this->urlProductCache[$referencia] = '<a href="' . $variant->url() . '" target="_blank">' . $referencia . '</a>';
+        }
+
+        return $this->urlProductCache[$referencia] = $referencia;
+    }
+
+    public function run(): void
+    {
+        parent::run();
+
+        $action = $this->request()->input('action', '');
+        switch ($action) {
+            case 'autocomplete-shipping-address':
+            case 'autocomplete-billing-address':
+                $this->autocompleteCustomerAddressAction();
+                return;
+
+            case 'autocomplete-customer':
+                $this->autocompleteCustomerAction();
+                return;
+
+            case 'autocomplete-supplier':
+                $this->autocompleteSupplierAction();
+                return;
+
+            case 'autocomplete-variant':
+                $this->autocompleteVariantAction();
+                return;
+
+            case 'get-payment-methods':
+                $this->getPaymentMethods();
+                return;
+
+            case 'get-provinces':
+                $this->getProvincias();
+                return;
+
+            case 'get-warehouses':
+                $this->getWarehouses();
+                return;
+
+            default:
+                // inicializamos los filtros para poder pintar el formulario con sus valores por defecto
+                $this->iniFilters();
+
+                // solo generamos el informe cuando el usuario envía el formulario (POST),
+                // así al abrir la página no se muestran resultados
+                if ($this->request()->isMethod('POST')) {
+                    $this->generarInforme();
+
+                    // si el informe se ha exportado (XLS/PDF) la respuesta ya se ha enviado
+                    if (in_array($this->format, ['XLS', 'PDF'], true)) {
+                        return;
+                    }
+                }
+
+                $this->view('ReportBreakdown.html.twig');
+        }
+    }
+
+    protected function autocompleteCustomerAction(): void
+    {
+        $list = [];
+        $cliente = new Cliente();
+        $query = $this->request()->input('query');
+        foreach ($cliente->codeModelSearch($query, 'codcliente') as $value) {
+            $list[] = [
+                'key' => Tools::fixHtml($value->code),
+                'value' => Tools::fixHtml($value->description)
+            ];
+        }
+
+        if (empty($list)) {
+            $list[] = ['key' => null, 'value' => Tools::trans('no-data')];
+        }
+
+        $this->response()->json($list);
+    }
+
+    protected function autocompleteCustomerAddressAction(): void
+    {
+        $list = [];
+        $where = [
+            Where::eq('codcliente', $this->request()->input('customer')),
+            Where::like('direccion', $this->request()->input('query'))
+        ];
+        $orderBy = ['apellidos' => 'ASC', 'nombre' => 'ASC'];
+        foreach (Contacto::all($where, $orderBy) as $contacto) {
+            $list[] = [
+                'key' => Tools::fixHtml($contacto->idcontacto),
+                'value' => Tools::fixHtml($this->getAddress($contacto))
+            ];
+        }
+
+        if (empty($list)) {
+            $list[] = ['key' => null, 'value' => Tools::trans('no-data')];
+        }
+
+        $this->response()->json($list);
+    }
+
+    protected function autocompleteSupplierAction(): void
+    {
+        $list = [];
+        $proveedor = new Proveedor();
+        $query = $this->request()->input('query');
+        foreach ($proveedor->codeModelSearch($query, 'codproveedor') as $value) {
+            $list[] = [
+                'key' => Tools::fixHtml($value->code),
+                'value' => Tools::fixHtml($value->description)
+            ];
+        }
+
+        if (empty($list)) {
+            $list[] = ['key' => null, 'value' => Tools::trans('no-data')];
+        }
+
+        $this->response()->json($list);
+    }
+
+    protected function autocompleteVariantAction(): void
+    {
+        $list = [];
+        $variant = new Variante();
+        $query = $this->request()->input('query');
+        foreach ($variant->codeModelSearch($query, 'referencia') as $value) {
+            $list[] = [
+                'key' => Tools::fixHtml($value->code),
+                'value' => Tools::fixHtml($value->description)
+            ];
+        }
+
+        if (empty($list)) {
+            $list[] = ['key' => null, 'value' => Tools::trans('no-data')];
+        }
+
+        $this->response()->json($list);
+    }
+
+    protected function buildDocumentExportRows(
+        string $codeHeader,
+        string $customerHeader,
+        string $dateHeader,
+        string $totalHeader
+    ): array
+    {
+        $rows = [];
+        $documents = $this->data[$this->type] ?? [];
+        foreach ($documents as $document) {
+            $customerName = $document['nombrecliente'] ?? $document['nombre'] ?? '';
+            $dateValue = empty($document['fecha']) ? '' : Tools::date($document['fecha']);
+            $rows[] = [
+                $codeHeader => $document['codigo'] ?? '',
+                $customerHeader => $customerName,
+                $dateHeader => $dateValue,
+                $totalHeader => Tools::number($document['total'] ?? 0)
+            ];
+        }
+
+        return $rows;
+    }
+
+    protected function buildFilterExportRows(ExportManager $exportManager): void
+    {
+        // Construimos los datos de los filtros aplicados
+        $filterData = [];
+        $isVentas = $this->generar === 'informe_ventas';
+
+        // Información general
+        $filterData[Tools::trans('report')] = Tools::trans($this->getPageData()['title']);
+        $filterData[Tools::trans('creation-date')] = Tools::dateTime();
+        $filterData[Tools::trans('from-date')] = Tools::date($this->desde);
+        $filterData[Tools::trans('until-date')] = Tools::date($this->hasta);
+        $filterData[Tools::trans('company')] = Empresas::get($this->idempresa)->nombrecorto;
+        $filterData[Tools::trans('document')] = Tools::trans($this->type);
+        $filterData[Tools::trans('type')] = $isVentas ? Tools::trans('sales') : Tools::trans('purchases');
+
+        // Filtros comunes
+        if (!empty($this->codalmacen)) {
+            $filterData[Tools::trans('warehouse')] = $this->codalmacen;
+        }
+
+        if (!empty($this->coddivisa)) {
+            $filterData[Tools::trans('currency')] = $this->coddivisa;
+        }
+
+        if (!empty($this->codpago)) {
+            $filterData[Tools::trans('method-payment')] = $this->codpago;
+        }
+
+        if (!empty($this->codserie)) {
+            $filterData[Tools::trans('serie')] = $this->codserie;
+        }
+
+        // Filtros específicos de ventas
+        if ($isVentas) {
+            if (!empty($this->cliente->id())) {
+                $filterData[Tools::trans('customer')] = $this->cliente->nombre;
+            }
+
+            if (!empty($this->billingAddress->id())) {
+                $filterData[Tools::trans('billing-address')] = $this->getAddress($this->billingAddress);
+            }
+
+            if (!empty($this->shippingAddress->id())) {
+                $filterData[Tools::trans('shipping-address')] = $this->getAddress($this->shippingAddress);
+            }
+
+            if (!empty($this->codagente)) {
+                $filterData[Tools::trans('agent')] = $this->codagente;
+            }
+
+            if (!empty($this->codpais)) {
+                $filterData[Tools::trans('country')] = $this->codpais;
+            }
+
+            if (!empty($this->provincia)) {
+                $filterData[Tools::trans('province')] = $this->provincia;
+            }
+
+            if (!empty($this->sale_minimo)) {
+                $filterData[Tools::trans('minimum-amount')] = Tools::number($this->sale_minimo);
+            }
+        } else {
+            // Filtros específicos de compras
+            if (!empty($this->proveedor->id())) {
+                $filterData[Tools::trans('supplier')] = $this->proveedor->nombre;
+            }
+
+            if (!empty($this->purchase_minimo)) {
+                $filterData[Tools::trans('minimum-amount')] = Tools::number($this->purchase_minimo);
+            }
+        }
+
+        // Filtro de variante
+        if (!empty($this->variant->referencia)) {
+            $filterData[Tools::trans('product') . '/' . Tools::trans('variant')] = $this->variant->referencia;
+        }
+
+        // Filtro de familia
+        if (!empty($this->family->codfamilia)) {
+            $filterData[Tools::trans('family')] = $this->family->descripcion ?: $this->family->codfamilia;
+        }
+
+        // Convertimos el array asociativo a filas para la tabla
+        $filterHeader = Tools::trans('filter');
+        $valueHeader = Tools::trans('value');
+        $rows = [];
+        foreach ($filterData as $key => $value) {
+            $rows[] = [
+                $filterHeader => $key,
+                $valueHeader => $value
+            ];
+        }
+
+        // Añadimos la tabla de filtros
+        $exportManager->addTablePage(
+            [$filterHeader, $valueHeader],
+            $rows,
+            [],
+            Tools::trans('filters')
+        );
+    }
+
+    protected function buildMonthOptions(array $monthHeaderMap): array
+    {
+        $options = [];
+        foreach ($monthHeaderMap as $monthHeader) {
+            $options[$monthHeader] = ['display' => 'right'];
+        }
+
+        return $options;
+    }
+
+    protected function buildNetExportRows(array $monthHeaderMap, string $customerHeader, string $yearHeader): array
+    {
+        $rows = [];
+        $previousCustomer = '';
+        $netData = $this->data['net'] ?? [];
+        foreach ($netData as $customer => $years) {
+            foreach ($years as $year => $months) {
+                $row = [
+                    $customerHeader => $customer !== $previousCustomer ? $customer : '',
+                    $yearHeader => $year
+                ];
+
+                foreach ($monthHeaderMap as $monthKey => $monthHeader) {
+                    $row[$monthHeader] = Tools::number($months[$monthKey] ?? 0);
+                }
+
+                $rows[] = $row;
+                $previousCustomer = $customer;
+            }
+        }
+
+        return $rows;
+    }
+
+    protected function buildUnitsExportRows(
+        array  $monthHeaderMap,
+        string $customerHeader,
+        string $productHeader,
+        string $yearHeader
+    ): array
+    {
+        $rows = [];
+        $previousCustomer = '';
+        $previousProduct = '';
+        $unitsData = $this->data['units'] ?? [];
+        foreach ($unitsData as $customer => $products) {
+            foreach ($products as $product => $years) {
+                foreach ($years as $year => $months) {
+                    // Igual que en Twig: no repetimos cliente o producto consecutivo.
+                    $row = [
+                        $customerHeader => $customer !== $previousCustomer ? $customer : '',
+                        $productHeader => ($customer !== $previousCustomer || $product !== $previousProduct) ? $product : '',
+                        $yearHeader => $year
+                    ];
+
+                    foreach ($monthHeaderMap as $monthKey => $monthHeader) {
+                        $row[$monthHeader] = Tools::number($months[$monthKey] ?? 0);
+                    }
+
+                    $rows[] = $row;
+                    $previousProduct = $product;
+                }
+
+                $previousCustomer = $customer;
+            }
+        }
+
+        return $rows;
+    }
+
+    protected function generarInforme(): void
+    {
+        switch ($this->generar) {
+            case 'informe_compras':
+                $this->data['units'] = $this->getInformeComprasUnidadesData();
+                // reutilizamos las filas de documentos para calcular el neto y evitar una consulta duplicada
+                $this->data[$this->type] = $this->getInformeComprasDocumentData();
+                $this->data['net'] = $this->getNetoFromDocuments($this->data[$this->type], ['codproveedor', 'nombre']);
+                break;
+
+            case 'informe_ventas':
+                $this->data['units'] = $this->getInformeVentasUnidadesData();
+                // reutilizamos las filas de documentos para calcular el neto y evitar una consulta duplicada
+                $this->data[$this->type] = $this->getInformeVentasDocumentData();
+                $this->data['net'] = $this->getNetoFromDocuments($this->data[$this->type], ['codcliente', 'nombrecliente']);
+                break;
+        }
+
+        switch ($this->format) {
+            case 'XLS':
+            case 'PDF':
+                $this->generarInformeExport();
+                return;
+        }
+    }
+
+    protected function generarInformeExport(): void
+    {
+        $exportManager = new ExportManager();
+        $exportManager->setOrientation('landscape');
+        $exportManager->newDoc($this->format, $this->getTitleExport());
+        $exportManager->setCompany($this->idempresa);
+
+        $monthHeaderMap = $this->getMonthHeaderMap();
+        $monthHeaders = array_values($monthHeaderMap);
+        $monthOptions = $this->buildMonthOptions($monthHeaderMap);
+
+        $customerHeader = Tools::trans('customer');
+        $productHeader = Tools::trans('product');
+        $yearHeader = Tools::trans('year');
+
+        // creamos la página de resumen con los filtros aplicados
+        $this->buildFilterExportRows($exportManager);
+
+        // creamos la página de unidades
+        $unitsHeaders = array_merge([$customerHeader, $productHeader, $yearHeader], $monthHeaders);
+        $unitsRows = $this->buildUnitsExportRows($monthHeaderMap, $customerHeader, $productHeader, $yearHeader);
+        $exportManager->addTablePage($unitsHeaders, $unitsRows, $monthOptions, Tools::trans('units'));
+
+        // creamos la pagina de neto
+        $netHeaders = array_merge([$customerHeader, $yearHeader], $monthHeaders);
+        $netRows = $this->buildNetExportRows($monthHeaderMap, $customerHeader, $yearHeader);
+        $exportManager->addTablePage($netHeaders, $netRows, $monthOptions, Tools::trans('net'));
+
+        // creamos la página de documentos
+        $codeHeader = Tools::trans('code');
+        $dateHeader = Tools::trans('date');
+        $totalHeader = Tools::trans('total');
+        $documentHeaders = [$codeHeader, $customerHeader, $dateHeader, $totalHeader];
+        $documentRows = $this->buildDocumentExportRows($codeHeader, $customerHeader, $dateHeader, $totalHeader);
+        $documentOptions = [
+            $dateHeader => ['display' => 'right'],
+            $totalHeader => ['display' => 'right']
+        ];
+        $exportManager->addTablePage($documentHeaders, $documentRows, $documentOptions, Tools::trans($this->type));
+
+        $response = $this->response();
+        $exportManager->show($response);
+        $response->send();
+    }
+
+    protected function getDatosAgrupados(array $data, array $keys, string $valueField = 'total'): array
+    {
+        if (empty($keys)) {
+            return [];
+        }
+
+        $agrupados = [];
+        foreach ($data as $row) {
+            $keyValue = '';
+            foreach ($keys as $key) {
+                if (empty($keyValue)) {
+                    $keyValue = $row[$key];
+                    continue;
+                }
+
+                $keyValue .= ' | ' . $row[$key];
+            }
+
+            // el año y el mes vienen ya calculados desde SQL (EXTRACT), evitamos strtotime por fila
+            $year = (string)(int)$row['anyo'];
+            $mes = $this->getMonthKey($row['mes']);
+            if (empty($mes)) {
+                continue;
+            }
+
+            if (!isset($agrupados[$keyValue][$year])) {
+                $agrupados[$keyValue][$year] = $this->getEmptyMonths();
+            }
+
+            // acumulamos mes a mes
+            $agrupados[$keyValue][$year][$mes] += floatval($row[$valueField]);
+
+            // acumulamos el año
+            $agrupados[$keyValue][$year]['total'] += floatval($row[$valueField]);
+        }
+
+        return $agrupados;
+    }
+
+    protected function getEmptyMonths(): array
+    {
+        return [
+            'january' => 0, // enero
+            'february' => 0, // febrero
+            'march' => 0,
+            'april' => 0,
+            'may' => 0,
+            'june' => 0,
+            'july' => 0,
+            'august' => 0,
+            'september' => 0,
+            'october' => 0,
+            'november' => 0,
+            'december' => 0, // diciembre
+            'total' => 0 // total anual
+        ];
+    }
+
+    protected function getMonthKey($mes): string
+    {
+        $names = [
+            1 => 'january',
+            2 => 'february',
+            3 => 'march',
+            4 => 'april',
+            5 => 'may',
+            6 => 'june',
+            7 => 'july',
+            8 => 'august',
+            9 => 'september',
+            10 => 'october',
+            11 => 'november',
+            12 => 'december'
+        ];
+
+        return $names[(int)$mes] ?? '';
+    }
+
+    protected function getNetoFromDocuments(array $documents, array $keys): array
+    {
+        if (empty($documents)) {
+            return [];
+        }
+
+        // agrupamos el neto reutilizando las filas ya obtenidas para la pestaña de documentos
+        $agrupados = $this->getDatosAgrupados($documents, $keys, 'neto');
+
+        // los documentos vienen ordenados por fecha, así que reordenamos para mantener
+        // el comportamiento previo: cliente/proveedor ascendente y año descendente (más reciente primero)
+        ksort($agrupados);
+        foreach ($agrupados as &$years) {
+            krsort($years);
+        }
+        unset($years);
+
+        return $agrupados;
+    }
+
+    protected function getDatosAgrupadosRef(array $data, array $keys): array
+    {
+        if (empty($keys)) {
+            return [];
+        }
+
+        $agrupados = [];
+        foreach ($data as $row) {
+            $keyVal = '';
+            foreach ($keys as $key) {
+                if (empty($keyVal)) {
+                    $keyVal = $row[$key];
+                    continue;
+                }
+
+                $keyVal .= ' | ' . $row[$key];
+            }
+
+            $ref = $row['referencia'];
+            // el año y el mes vienen ya calculados desde SQL (EXTRACT), evitamos strtotime por fila
+            $year = (string)(int)$row['anyo'];
+            $mes = $this->getMonthKey($row['mes']);
+            if (empty($mes)) {
+                continue;
+            }
+
+            if (!isset($agrupados[$keyVal][$ref][$year])) {
+                $agrupados[$keyVal][$ref][$year] = $this->getEmptyMonths();
+            }
+
+            // acumulamos mes a mes
+            $agrupados[$keyVal][$ref][$year][$mes] += floatval($row['total']);
+
+            // acumulamos el año
+            $agrupados[$keyVal][$ref][$year]['total'] += floatval($row['total']);
+        }
+
+        return $agrupados;
+    }
+
+    protected function getFamilyVariantsSql(): string
+    {
+        return "(SELECT v.referencia FROM " . Variante::tableName() . " v"
+            . " JOIN " . Producto::tableName() . " p ON v.idproducto = p.idproducto"
+            . " WHERE p.codfamilia = " . $this->db()->var2str($this->family->codfamilia) . ")";
+    }
+
+    protected function getInformeComprasDataWhere(bool $withLineAlias = true): string
+    {
+        $sql = '';
+
+        if ($this->codalmacen) {
+            $sql .= " AND d.codalmacen = " . $this->db()->var2str($this->codalmacen);
+        }
+
+        if ($this->coddivisa) {
+            $sql .= " AND d.coddivisa = " . $this->db()->var2str($this->coddivisa);
+        }
+
+        if ($this->codpago) {
+            $sql .= " AND d.codpago = " . $this->db()->var2str($this->codpago);
+        }
+
+        if ($this->codserie) {
+            $sql .= " AND d.codserie = " . $this->db()->var2str($this->codserie);
+        }
+
+        if (!empty($this->proveedor->id())) {
+            $sql .= " AND d.codproveedor = " . $this->db()->var2str($this->proveedor->id());
+        }
+
+        if ($this->purchase_minimo) {
+            $sql .= " AND d.neto > " . $this->db()->var2str($this->purchase_minimo);
+        }
+
+        if (!empty($this->variant->id())) {
+            if ($withLineAlias) {
+                $sql .= " AND l.referencia = " . $this->db()->var2str($this->variant->referencia);
+            } else {
+                $lineTable = $this->type === 'invoices' ? 'lineasfacturasprov' : 'lineasalbaranesprov';
+                $code = $this->type === 'invoices' ? 'idfactura' : 'idalbaran';
+                $sql .= " AND d." . $code . " IN (SELECT " . $code . " FROM " . $lineTable
+                    . " WHERE referencia = " . $this->db()->var2str($this->variant->referencia) . ")";
+            }
+        }
+
+        if (!empty($this->family->codfamilia)) {
+            if ($withLineAlias) {
+                $sql .= " AND l.referencia IN " . $this->getFamilyVariantsSql();
+            } else {
+                $lineTable = $this->type === 'invoices' ? 'lineasfacturasprov' : 'lineasalbaranesprov';
+                $code = $this->type === 'invoices' ? 'idfactura' : 'idalbaran';
+                $sql .= " AND d." . $code . " IN (SELECT " . $code . " FROM " . $lineTable
+                    . " WHERE referencia IN " . $this->getFamilyVariantsSql() . ")";
+            }
+        }
+
+        return $sql;
+    }
+
+    protected function getInformeComprasDocumentData(): array
+    {
+        $table = $this->type === 'invoices' ? 'facturasprov' : 'albaranesprov';
+        $code = $this->type === 'invoices' ? 'idfactura' : 'idalbaran';
+
+        $sql = "SELECT d." . $code . " as id, d.codigo, d.codproveedor, d.nombre, d.fecha,"
+            . " EXTRACT(YEAR FROM d.fecha) as anyo, EXTRACT(MONTH FROM d.fecha) as mes, d.neto, d.total"
+            . " FROM " . $table . " d"
+            . " WHERE d.fecha >= " . $this->db()->var2str($this->desde)
+            . " AND d.fecha <= " . $this->db()->var2str($this->hasta)
+            . " AND d.idempresa = " . $this->db()->var2str($this->idempresa)
+            . $this->getInformeComprasDataWhere(false)
+            . " ORDER BY d.fecha ASC, d.hora ASC;";
+
+        return $this->db()->select($sql);
+    }
+
+    protected function getInformeComprasUnidadesData(): array
+    {
+        $table = $this->type === 'invoices' ? 'facturasprov' : 'albaranesprov';
+        $line = $this->type === 'invoices' ? 'lineasfacturasprov' : 'lineasalbaranesprov';
+        $code = $this->type === 'invoices' ? 'idfactura' : 'idalbaran';
+
+        // agrupamos por año y mes en SQL para reducir filas y evitar re-agrupar por fecha en PHP
+        $sql = "SELECT d.codproveedor, d.nombre, l.referencia,"
+            . " EXTRACT(YEAR FROM d.fecha) as anyo, EXTRACT(MONTH FROM d.fecha) as mes,"
+            . " SUM(l.cantidad) as total"
+            . " FROM " . $table . " d, " . $line . " l"
+            . " WHERE l." . $code . " = d." . $code
+            . " AND l.referencia IS NOT NULL"
+            . " AND d.idempresa = " . $this->db()->var2str($this->idempresa)
+            . " AND d.fecha >= " . $this->db()->var2str($this->desde)
+            . " AND d.fecha <= " . $this->db()->var2str($this->hasta)
+            . $this->getInformeComprasDataWhere()
+            . " GROUP BY d.codproveedor, d.nombre, l.referencia,"
+            . " EXTRACT(YEAR FROM d.fecha), EXTRACT(MONTH FROM d.fecha)"
+            . " ORDER BY d.codproveedor ASC, l.referencia ASC,"
+            . " EXTRACT(YEAR FROM d.fecha) DESC, EXTRACT(MONTH FROM d.fecha) DESC;";
+
+        $data = $this->db()->select($sql);
+        if (empty($data)) {
+            return [];
+        }
+
+        // agrupamos los datos por proveedor, referencia, año y mes
+        return $this->getDatosAgrupadosRef($data, ['codproveedor', 'nombre']);
+    }
+
+    protected function getInformeVentasDataWhere(bool $withLineAlias = true): string
+    {
+        $sql = '';
+        if (!empty($this->cliente->id())) {
+            $sql .= " AND d.codcliente = " . $this->db()->var2str($this->cliente->id());
+        }
+
+        if (!empty($this->billingAddress->id())) {
+            $sql .= " AND d.idcontactofact = " . $this->db()->var2str($this->billingAddress->id());
+        }
+
+        if (!empty($this->shippingAddress->id())) {
+            $sql .= " AND d.idcontactoenv = " . $this->db()->var2str($this->shippingAddress->id());
+        }
+
+        if ($this->codagente) {
+            $sql .= " AND d.codagente = " . $this->db()->var2str($this->codagente);
+        }
+
+        if ($this->codalmacen) {
+            $sql .= " AND d.codalmacen = " . $this->db()->var2str($this->codalmacen);
+        }
+
+        if ($this->coddivisa) {
+            $sql .= " AND d.coddivisa = " . $this->db()->var2str($this->coddivisa);
+        }
+
+        if ($this->codpago) {
+            $sql .= " AND d.codpago = " . $this->db()->var2str($this->codpago);
+        }
+
+        if ($this->codpais) {
+            $sql .= " AND d.codpais = " . $this->db()->var2str($this->codpais);
+        }
+
+        if ($this->codserie) {
+            $sql .= " AND d.codserie = " . $this->db()->var2str($this->codserie);
+        }
+
+        if ($this->provincia) {
+            $sql .= " AND lower(d.provincia) = lower(" . $this->db()->var2str($this->provincia) . ")";
+        }
+
+        if ($this->sale_minimo) {
+            $sql .= " AND d.neto > " . $this->db()->var2str($this->sale_minimo);
+        }
+
+        if (!empty($this->variant->id())) {
+            if ($withLineAlias) {
+                $sql .= " AND l.referencia = " . $this->db()->var2str($this->variant->referencia);
+            } else {
+                $lineTable = $this->type === 'invoices' ? 'lineasfacturascli' : 'lineasalbaranescli';
+                $code = $this->type === 'invoices' ? 'idfactura' : 'idalbaran';
+                $sql .= " AND d." . $code . " IN (SELECT " . $code . " FROM " . $lineTable
+                    . " WHERE referencia = " . $this->db()->var2str($this->variant->referencia) . ")";
+            }
+        }
+
+        if (!empty($this->family->codfamilia)) {
+            if ($withLineAlias) {
+                $sql .= " AND l.referencia IN " . $this->getFamilyVariantsSql();
+            } else {
+                $lineTable = $this->type === 'invoices' ? 'lineasfacturascli' : 'lineasalbaranescli';
+                $code = $this->type === 'invoices' ? 'idfactura' : 'idalbaran';
+                $sql .= " AND d." . $code . " IN (SELECT " . $code . " FROM " . $lineTable
+                    . " WHERE referencia IN " . $this->getFamilyVariantsSql() . ")";
+            }
+        }
+
+        return $sql;
+    }
+
+    protected function getInformeVentasDocumentData(): array
+    {
+        $table = $this->type === 'invoices' ? 'facturascli' : 'albaranescli';
+        $code = $this->type === 'invoices' ? 'idfactura' : 'idalbaran';
+
+        $sql = "SELECT d." . $code . " as id, d.codigo, d.codcliente, d.nombrecliente, d.fecha,"
+            . " EXTRACT(YEAR FROM d.fecha) as anyo, EXTRACT(MONTH FROM d.fecha) as mes, d.neto, d.total"
+            . " FROM " . $table . " d"
+            . " WHERE d.fecha >= " . $this->db()->var2str($this->desde)
+            . " AND d.fecha <= " . $this->db()->var2str($this->hasta)
+            . " AND d.idempresa = " . $this->db()->var2str($this->idempresa)
+            . $this->getInformeVentasDataWhere(false)
+            . " ORDER BY d.fecha ASC, d.hora ASC;";
+
+        return $this->db()->select($sql);
+    }
+
+    protected function getInformeVentasUnidadesData(): array
+    {
+        $table = $this->type === 'invoices' ? 'facturascli' : 'albaranescli';
+        $line = $this->type === 'invoices' ? 'lineasfacturascli' : 'lineasalbaranescli';
+        $code = $this->type === 'invoices' ? 'idfactura' : 'idalbaran';
+
+        // agrupamos por año y mes en SQL para reducir filas y evitar re-agrupar por fecha en PHP
+        $sql = "SELECT d.codcliente, d.nombrecliente, l.referencia,"
+            . " EXTRACT(YEAR FROM d.fecha) as anyo, EXTRACT(MONTH FROM d.fecha) as mes,"
+            . " SUM(l.cantidad) as total"
+            . " FROM " . $table . " d, " . $line . " l"
+            . " WHERE l." . $code . " = d." . $code
+            . " AND l.referencia IS NOT NULL"
+            . " AND d.idempresa = " . $this->db()->var2str($this->idempresa)
+            . " AND d.fecha >= " . $this->db()->var2str($this->desde)
+            . " AND d.fecha <= " . $this->db()->var2str($this->hasta)
+            . $this->getInformeVentasDataWhere()
+            . " GROUP BY d.codcliente, d.nombrecliente, l.referencia,"
+            . " EXTRACT(YEAR FROM d.fecha), EXTRACT(MONTH FROM d.fecha)"
+            . " ORDER BY d.codcliente ASC, l.referencia ASC,"
+            . " EXTRACT(YEAR FROM d.fecha) DESC, EXTRACT(MONTH FROM d.fecha) DESC;";
+
+        $data = $this->db()->select($sql);
+        if (empty($data)) {
+            return [];
+        }
+
+        // agrupamos los datos por cliente, referencia, año y mes
+        return $this->getDatosAgrupadosRef($data, ['codcliente', 'nombrecliente']);
+    }
+
+    protected function getMonthHeaderMap(): array
+    {
+        return [
+            'january' => Tools::trans('january'),
+            'february' => Tools::trans('february'),
+            'march' => Tools::trans('march'),
+            'april' => Tools::trans('april'),
+            'may' => Tools::trans('may'),
+            'june' => Tools::trans('june'),
+            'july' => Tools::trans('july'),
+            'august' => Tools::trans('august'),
+            'september' => Tools::trans('september'),
+            'october' => Tools::trans('october'),
+            'november' => Tools::trans('november'),
+            'december' => Tools::trans('december'),
+            'total' => Tools::trans('total')
+        ];
+    }
+
+    protected function getPaymentMethods(): void
+    {
+        $html = '<option value="">------</option>';
+        $this->idempresa = $this->request()->input('idempresa');
+        $where = [Where::eq('idempresa', $this->idempresa)];
+        foreach (FormaPago::all($where) as $paymentMethod) {
+            $html .= '<option value="' . $paymentMethod->codpago . '">' . Tools::fixHtml($paymentMethod->descripcion) . '</option>';
+        }
+
+        $this->response()->header('Content-Type', 'application/json')->setContent(json_encode($html))->send();
+    }
+
+    protected function getProvincias(): void
+    {
+        $html = '<option value="">------</option>';
+        $this->provincia = $this->request()->input('provincia');
+        $this->codpais = $this->request()->input('codpais');
+        if (!empty($this->codpais)) {
+            $sql = "select distinct provincia from facturascli as fc where fc.codpais = " . $this->db()->var2str($this->codpais);
+            $lineas = $this->db()->select($sql);
+            foreach ($lineas as $dl) {
+                if (!is_null($dl['provincia'])) {
+                    $check = $this->provincia == $dl['provincia'] ? 'selected' : '';
+                    $html .= '<option value="' . $dl['provincia'] . '" ' . $check . '>' . $dl['provincia'] . '</option>';
+                }
+            }
+        }
+
+        $this->response()->header('Content-Type', 'application/json')->setContent(json_encode($html))->send();
+    }
+
+    protected function getTitleExport(): string
+    {
+        $title = Tools::trans('report-breakdown');
+
+        $title .= $this->generar === 'informe_ventas'
+            ? '_' . Tools::trans('sales')
+            : '_' . Tools::trans('purchases');
+
+        $title .= $this->type === 'invoices'
+            ? '_' . Tools::trans('invoices')
+            : '_' . Tools::trans('delivery-notes');
+
+        $title .= '_' . Tools::dateTime();
+
+        return strtolower(str_replace(' ', '_', $title));
+    }
+
+    protected function getWarehouses(): void
+    {
+        $html = '<option value="">------</option>';
+        $this->idempresa = $this->request()->input('idempresa');
+        $where = [Where::eq('idempresa', $this->idempresa)];
+        foreach (Almacen::all($where) as $warehouse) {
+            $html .= '<option value="' . $warehouse->codalmacen . '">' . Tools::fixHtml($warehouse->nombre) . '</option>';
+        }
+
+        $this->response()->header('Content-Type', 'application/json')->setContent(json_encode($html))->send();
+    }
+
+    /**
+     * Obtenemos los valores de los filtros del formulario.
+     */
+    protected function iniFilters(): void
+    {
+        // filtros generales
+        $this->desde = $this->request()->input('desde', date('Y') . '-01-01');
+        $this->hasta = $this->request()->input('hasta', date('Y') . '-12-31');
+        $this->idempresa = $this->request()->input('idempresa', Tools::settings('default', 'idempresa'));
+        $this->codalmacen = $this->request()->input('codalmacen');
+        $this->codserie = $this->request()->input('codserie');
+        $this->codpago = $this->request()->input('codpago');
+        $this->coddivisa = $this->request()->input('coddivisa', Tools::settings('default', 'coddivisa'));
+        $this->codagente = $this->request()->input('codagente');
+        $this->type = $this->request()->input('type', 'invoices');
+        if (!in_array($this->type, ['invoices', 'delivery-notes'], true)) {
+            $this->type = 'invoices';
+        }
+        $this->format = $this->request()->input('format', 'screen');
+        $this->generar = $this->request()->input('generar', 'informe_ventas');
+
+        $this->variant = new Variante();
+        $whereVariant = [Where::eq('referencia', $this->request()->input('refvariant'))];
+        $this->variant->loadWhere($whereVariant);
+
+        $this->family = new Familia();
+        $whereFamily = [Where::eq('codfamilia', $this->request()->input('codfamilia'))];
+        $this->family->loadWhere($whereFamily);
+
+        // filtros de ventas
+        $this->codpais = $this->request()->input('codpais');
+        $this->provincia = $this->request()->input('provincia', false);
+        $this->sale_minimo = (float)$this->request()->input('sale-minimo', false);
+
+        $this->cliente = new Cliente();
+        $this->cliente->load($this->request()->input('codcliente'));
+
+        $this->billingAddress = new Contacto();
+        $this->billingAddress->load($this->request()->input('idcontactofact'));
+
+        $this->shippingAddress = new Contacto();
+        $this->shippingAddress->load($this->request()->input('idcontactoenv'));
+
+        // filtros de compras
+        $this->proveedor = new Proveedor();
+        $this->proveedor->load($this->request()->input('codproveedor'));
+
+        $this->purchase_minimo = (float)$this->request()->input('purchase-minimo', false);
+    }
+
+}

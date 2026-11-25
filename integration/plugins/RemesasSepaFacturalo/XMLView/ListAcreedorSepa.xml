@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="company" order="100">
+            <widget type="select" fieldname="idempresa">
+                <values source="empresas" fieldcode="idempresa" fieldtitle="nombrecorto"/>
+            </widget>
+        </column>
+        <column name="sepa-name" order="110">
+            <widget type="text" fieldname="nombre"/>
+        </column>
+        <column name="sepa-creditor-id" order="120">
+            <widget type="text" fieldname="aci"/>
+        </column>
+        <column name="sepa-iban-masked" order="130">
+            <widget type="text" fieldname="ibanmask"/>
+        </column>
+    </columns>
+</view>

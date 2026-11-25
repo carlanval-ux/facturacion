@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="id" display="none" order="100">
+            <widget type="text" fieldname="id" readonly="true"/>
+        </column>
+        <column name="name" title="name" numcolumns="3" order="110">
+            <widget type="text" fieldname="nombre"/>
+        </column>
+        <column name="url" title="url" numcolumns="5" order="120">
+            <widget type="text" fieldname="url"/>
+        </column>
+        <column name="observations" title="observations" numcolumns="4" order="140">
+            <widget type="text" fieldname="observaciones"/>
+        </column>
+    </columns>
+</view>

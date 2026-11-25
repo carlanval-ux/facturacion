@@ -1,0 +1,126 @@
+<?php
+/**
+ * This file is part of Informes plugin for FacturaScripts
+ * Copyright (C) 2022-2026 Carlos García Gómez <carlos@facturascripts.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+namespace FacturaScripts\Plugins\Informes\Lib\ReportChart;
+
+/**
+ * Description of BarChart
+ *
+ * @author Daniel Fernández Giménez <contacto@danielfg.es>
+ */
+class BarChart extends AreaChart
+{
+    public function render(array $dataChart = []): string
+    {
+        $data = $this->getData();
+        if (empty($data)) {
+            return '';
+        }
+
+        $num = mt_rand();
+        $chartId = 'chart' . $num;
+        $chartHeight = isset($dataChart['height']) && $dataChart['height'] > 0 ? $dataChart['height'] : 350;
+        $horizontal = !empty($dataChart['horizontal']);
+        $colors = !empty($dataChart['colors']) && is_array($dataChart['colors']) ? $dataChart['colors'] : null;
+
+        $series = [];
+        foreach ($data['datasets'] as $dataset) {
+            $series[] = [
+                'name' => $dataset['label'],
+                'data' => $dataset['data']
+            ];
+        }
+
+        return '<div id="' . $chartId . '"></div>'
+            . '<script>'
+            . 'var options' . $num . ' = {'
+            . '  series: ' . json_encode($series) . ','
+            . ($colors ? '  colors: ' . json_encode($colors) . ',' : '')
+            . '  chart: {'
+            . '    height: ' . $chartHeight . ','
+            . '    type: "bar",'
+            . '  },'
+            . '  plotOptions: {'
+            . '    bar: {'
+            . '      horizontal: ' . ($horizontal ? 'true' : 'false') . ','
+            . '      borderRadius: 0,'
+            . '      dataLabels: {'
+            . '        position: "' . ($horizontal ? 'center' : 'top') . '",'
+            . '      },'
+            . '    }'
+            . '  },'
+            . '  dataLabels: {'
+            . '    enabled: false,'
+            . '    offsetY: 0,'
+            . '    style: {'
+            . '      fontSize: "12px",'
+            . '      colors: ["#304758"]'
+            . '    }'
+            . '  },'
+            . '  xaxis: {'
+            . '    categories: ' . json_encode($data['labels']) . ','
+            . '    position: "bottom",'
+            . '    axisBorder: {'
+            . '      show: false'
+            . '    },'
+            . '    axisTicks: {'
+            . '      show: false'
+            . '    },'
+            . '    crosshairs: {'
+            . '      fill: {'
+            . '        type: "gradient",'
+            . '        gradient: {'
+            . '          colorFrom: "#D8E3F0",'
+            . '          colorTo: "#BED1E6",'
+            . '          stops: [0, 100],'
+            . '          opacityFrom: 0.4,'
+            . '          opacityTo: 0.5,'
+            . '        }'
+            . '      }'
+            . '    },'
+            . '    tooltip: {'
+            . '      enabled: true,'
+            . '    }'
+            . '  },'
+            . '  yaxis: {'
+            . '    axisBorder: {'
+            . '      show: false'
+            . '    },'
+            . '    axisTicks: {'
+            . '      show: false,'
+            . '    },'
+            . '    labels: {'
+            . '      show: true'
+            . '    }'
+            . '  },'
+            . '  title: {'
+            . '    text: "' . $this->report->name . '",'
+            . '    floating: false,'
+            . '    offsetY: 0,'
+            . '    align: "' . ($horizontal ? 'left' : 'center') . '",'
+            . '    style: {'
+            . '      color: "#444"'
+            . '    }'
+            . '  }'
+            . '};'
+            . 'var chart' . $num . ' = new ApexCharts(document.querySelector("#' . $chartId . '"), options' . $num . ');'
+            . 'chart' . $num . '.render();'
+            . '</script>';
+    }
+}

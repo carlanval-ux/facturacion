@@ -1,0 +1,8 @@
+{
+    "name": "informes",
+    "description": "Informes comerciales, contables y financieros",
+    "license": "LGPL-3.0-or-later",
+    "dependencies": {
+        "apexcharts": "^5.3.6"
+    }
+}

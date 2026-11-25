@@ -1,0 +1,156 @@
+{% extends "Master/MenuTemplate.html.twig" %}
+
+{% macro cifra(fsc, label, ruta, base, cuota) %}
+    <tr>
+        <td>{% if ruta %}<a href="{{ fsc.enlace(ruta) }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</td>
+        <td class="text-end">{{ base is null ? '' : fsc.dinero(base) }}</td>
+        <td class="text-end">{{ cuota is null ? '' : fsc.dinero(cuota) }}</td>
+    </tr>
+{% endmacro %}
+
+{% block body %}
+{% import _self as m %}
+<div class="container-fluid py-3">
+    <h1 class="h4 mb-1"><i class="fa-solid fa-box-archive me-2"></i>{{ trans('trimestral-title') }}</h1>
+    <div class="alert alert-warning py-2 small" role="alert">{{ trans('trimestral-aviso') }}</div>
+
+    {% if not fsc.activo %}
+        <div class="alert alert-info">{{ trans('trimestral-modulo-inactivo') }}</div>
+    {% elseif fsc.paquete is empty %}
+        <div class="alert alert-info">{{ trans('trimestral-sin-ejercicio') }}</div>
+    {% else %}
+    {% set p = fsc.paquete %}
+    {% set mod = p.modelos %}
+    <form method="get" action="PaqueteTrimestral" class="row g-2 align-items-end mb-3">
+        <div class="col-auto">
+            <label class="form-label small mb-0" for="codejercicio">{{ trans('fiscal-year') }}</label>
+            <select name="codejercicio" id="codejercicio" class="form-select form-select-sm">
+                {% for e in fsc.ejercicios() %}
+                    <option value="{{ e.codejercicio }}" {{ e.codejercicio == fsc.codejercicio ? 'selected' }}>{{ e.nombre }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label small mb-0" for="periodo">{{ trans('trimestral-periodo') }}</label>
+            <select name="periodo" id="periodo" class="form-select form-select-sm">
+                {% for t in ['T1', 'T2', 'T3', 'T4', 'anual'] %}
+                    <option value="{{ t }}" {{ t == fsc.periodo ? 'selected' }}>{{ t == 'anual' ? trans('trimestral-anual') : t[1] ~ 'T' }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label small mb-0" for="previos">{{ trans('trimestral-pagos-previos') }}</label>
+            <input type="number" step="0.01" name="previos" id="previos" value="{{ fsc.previos }}" class="form-control form-control-sm">
+        </div>
+        <div class="col-auto"><button class="btn btn-sm btn-primary" type="submit">{{ trans('trimestral-calcular') }}</button></div>
+    </form>
+    <p class="text-muted small">{{ p.emisor.nombre }} · {{ p.emisor.cifnif }} · {{ p.periodo.desde }} – {{ p.periodo.hasta }}</p>
+
+    <div class="mb-3 d-flex flex-wrap gap-2">
+        <a class="btn btn-sm btn-outline-primary" href="{{ fsc.enlaceAccion('libro-emitidas-csv') }}">{{ trans('trimestral-libro-emitidas') }} CSV</a>
+        <a class="btn btn-sm btn-outline-primary" href="{{ fsc.enlaceAccion('libro-emitidas-pdf') }}">{{ trans('trimestral-libro-emitidas') }} PDF</a>
+        <a class="btn btn-sm btn-outline-primary" href="{{ fsc.enlaceAccion('libro-recibidas-csv') }}">{{ trans('trimestral-libro-recibidas') }} CSV</a>
+        <a class="btn btn-sm btn-outline-primary" href="{{ fsc.enlaceAccion('libro-recibidas-pdf') }}">{{ trans('trimestral-libro-recibidas') }} PDF</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ fsc.enlaceAccion('resumen-pdf') }}">{{ trans('trimestral-resumen') }} PDF</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ fsc.enlaceAccion('json') }}">JSON</a>
+        <a class="btn btn-sm btn-success" href="{{ fsc.enlaceAccion('zip') }}"><i class="fa-solid fa-file-zipper me-1"></i>{{ trans('trimestral-paquete-zip') }}</a>
+    </div>
+
+    {% if fsc.detalle is not null %}
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between">
+            <span>{{ trans('trimestral-facturas-de') }} <code>{{ fsc.ruta }}</code></span>
+            <a href="{{ fsc.enlaceAccion('') }}" class="small">{{ trans('close') }}</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>{{ trans('invoice') }}</th><th>{{ trans('date') }}</th><th>{{ trans('trimestral-tercero') }}</th><th>NIF</th><th class="text-end">{{ trans('total') }}</th></tr></thead>
+                <tbody>
+                {% for f in fsc.detalle %}
+                    <tr><td><a href="{{ f.url }}">{{ f.codigo }}</a></td><td>{{ f.fecha }}</td><td>{{ f.tercero }}</td><td>{{ f.cifnif }}</td><td class="text-end">{{ f.total is null ? '' : fsc.dinero(f.total) }}</td></tr>
+                {% else %}
+                    <tr><td colspan="5" class="text-muted">{{ trans('trimestral-sin-facturas') }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if p.avisos is not empty %}
+    <div class="card border-warning mb-3">
+        <div class="card-header bg-warning-subtle">{{ trans('trimestral-avisos') }} ({{ p.avisos | length }})</div>
+        <ul class="list-group list-group-flush small">
+            {% for a in p.avisos %}
+                <li class="list-group-item">{{ trans('trimestral-aviso-' ~ a.codigo) }}: <strong>{{ a.mensaje }}</strong></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% set m303 = mod['303'] %}
+    <div class="card mb-3"><div class="card-header">303 · {{ trans('trimestral-303') }}</div>
+    <div class="table-responsive"><table class="table table-sm mb-0">
+        <thead><tr><th></th><th class="text-end">{{ trans('trimestral-base') }}</th><th class="text-end">{{ trans('trimestral-cuota') }}</th></tr></thead>
+        <tbody>
+        {% for t, n in m303.repercutido.tipos %}{{ m.cifra(fsc, trans('trimestral-repercutido') ~ ' ' ~ t ~ '%', '303.repercutido.tipos.' ~ t, n.base, n.cuota) }}{% endfor %}
+        {% for t, n in m303.repercutido.recargo_equivalencia %}{{ m.cifra(fsc, trans('trimestral-recargo') ~ ' ' ~ t ~ '%', '303.repercutido.recargo_equivalencia.' ~ t, n.base, n.cuota) }}{% endfor %}
+        {{ m.cifra(fsc, trans('trimestral-exentas'), '303.repercutido.exentas', m303.repercutido.exentas.base, null) }}
+        {{ m.cifra(fsc, trans('trimestral-no-sujetas'), '303.repercutido.no_sujetas', m303.repercutido.no_sujetas.base, null) }}
+        {{ m.cifra(fsc, trans('trimestral-isp'), '303.repercutido.isp', m303.repercutido.isp.base, null) }}
+        <tr class="table-light fw-bold"><td>{{ trans('trimestral-total-devengado') }}</td><td></td><td class="text-end">{{ fsc.dinero(m303.total_devengado) }}</td></tr>
+        {% for t, n in m303.soportado.tipos %}{{ m.cifra(fsc, trans('trimestral-soportado') ~ ' ' ~ t ~ '%', '303.soportado.tipos.' ~ t, n.base, n.cuota) }}{% endfor %}
+        {{ m.cifra(fsc, trans('trimestral-recargo-soportado'), '303.soportado.recargo_soportado', m303.soportado.recargo_soportado.base, m303.soportado.recargo_soportado.cuota) }}
+        {{ m.cifra(fsc, trans('trimestral-exentas') ~ ' (' ~ trans('trimestral-compras') ~ ')', '303.soportado.exentas', m303.soportado.exentas.base, null) }}
+        <tr class="table-light fw-bold"><td>{{ trans('trimestral-total-deducible') }}</td><td></td><td class="text-end">{{ fsc.dinero(m303.total_cuota_deducible) }}</td></tr>
+        <tr class="table-primary fw-bold"><td>{{ trans('trimestral-resultado') }}</td><td></td><td class="text-end">{{ fsc.dinero(m303.resultado) }}</td></tr>
+        </tbody></table></div></div>
+
+    {% set m130 = mod['130'] %}
+    <div class="card mb-3"><div class="card-header">130 · {{ trans('trimestral-130') }} ({{ m130.acumulado_desde }} – {{ m130.acumulado_hasta }})</div>
+    <div class="table-responsive"><table class="table table-sm mb-0"><tbody>
+        {{ m.cifra(fsc, trans('trimestral-ingresos'), '130.ingresos', null, m130.ingresos.importe) }}
+        {{ m.cifra(fsc, trans('trimestral-gastos'), '130.gastos_deducibles', null, m130.gastos_deducibles.importe) }}
+        {{ m.cifra(fsc, trans('trimestral-rendimiento'), '', null, m130.rendimiento_neto) }}
+        {{ m.cifra(fsc, '20 %', '', null, m130.veinte_por_ciento) }}
+        {{ m.cifra(fsc, trans('trimestral-retenciones-soportadas'), '130.retenciones_soportadas', null, m130.retenciones_soportadas.importe) }}
+        {{ m.cifra(fsc, trans('trimestral-pagos-previos'), '', null, m130.pagos_previos) }}
+        <tr class="table-primary fw-bold"><td>{{ trans('trimestral-resultado') }}</td><td></td><td class="text-end">{{ fsc.dinero(m130.resultado) }}</td></tr>
+    </tbody></table></div><div class="card-footer small text-muted">{{ m130.nota }}</div></div>
+
+    {% for num in ['111', '115'] %}
+    {% set r = mod[num] %}
+    <div class="card mb-3"><div class="card-header">{{ num }} · {{ trans('trimestral-' ~ num) }} ({{ r.num_perceptores }})</div>
+    <div class="table-responsive"><table class="table table-sm mb-0">
+        <thead><tr><th>{{ trans('trimestral-tercero') }}</th><th class="text-end">{{ trans('trimestral-base') }}</th><th class="text-end">{{ trans('trimestral-retencion') }}</th></tr></thead>
+        <tbody>
+        {% for x in r.perceptores %}{{ m.cifra(fsc, x.nombre ~ ' ' ~ x.cifnif, num ~ '.perceptores.' ~ loop.index0, x.base, x.retencion) }}{% else %}<tr><td colspan="3" class="text-muted">{{ trans('trimestral-sin-datos') }}</td></tr>{% endfor %}
+        <tr class="table-light fw-bold"><td>{{ trans('total') }}</td><td class="text-end">{{ fsc.dinero(r.base) }}</td><td class="text-end">{{ fsc.dinero(r.retenciones) }}</td></tr>
+        </tbody></table></div></div>
+    {% endfor %}
+
+    {% set m347 = mod['347'] %}
+    <div class="card mb-3"><div class="card-header">347 · {{ trans('trimestral-347') }} (&gt; {{ fsc.dinero(m347.umbral) }} € · {{ m347.anyo }})</div>
+    <div class="table-responsive"><table class="table table-sm mb-0">
+        <thead><tr><th>{{ trans('trimestral-tercero') }}</th><th class="text-end">1T</th><th class="text-end">2T</th><th class="text-end">3T</th><th class="text-end">4T</th><th class="text-end">{{ trans('total') }}</th></tr></thead>
+        <tbody>
+        {% for grupo in ['clientes', 'proveedores'] %}
+            <tr class="table-light"><td colspan="6"><strong>{{ trans('trimestral-' ~ grupo) }}</strong></td></tr>
+            {% for x in m347[grupo] %}
+            <tr><td><a href="{{ fsc.enlace('347.' ~ grupo ~ '.' ~ loop.index0) }}">{{ x.nombre }} {{ x.cifnif }}</a></td>
+                {% for q in x.trimestres %}<td class="text-end">{{ fsc.dinero(q) }}</td>{% endfor %}
+                <td class="text-end fw-bold">{{ fsc.dinero(x.total) }}</td></tr>
+            {% else %}<tr><td colspan="6" class="text-muted">{{ trans('trimestral-sin-datos') }}</td></tr>{% endfor %}
+        {% endfor %}
+        </tbody></table></div></div>
+
+    {% set m349 = mod['349'] %}
+    <div class="card mb-3"><div class="card-header">349 · {{ trans('trimestral-349') }}</div>
+    <div class="table-responsive"><table class="table table-sm mb-0">
+        <thead><tr><th>{{ trans('trimestral-clave') }} / {{ trans('trimestral-tercero') }}</th><th class="text-end">{{ trans('trimestral-base') }}</th><th></th></tr></thead>
+        <tbody>
+        {% for x in m349.operaciones %}{{ m.cifra(fsc, x.clave ~ ' · ' ~ x.nombre ~ ' ' ~ x.cifnif, '349.operaciones.' ~ loop.index0, x.base, null) }}{% else %}<tr><td colspan="3" class="text-muted">{{ trans('trimestral-sin-datos') }}</td></tr>{% endfor %}
+        </tbody></table></div></div>
+    {% endif %}
+</div>
+{% endblock %}

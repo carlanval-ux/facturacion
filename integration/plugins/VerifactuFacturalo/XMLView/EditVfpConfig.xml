@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <group name="verifactu" numcolumns="12">
+            <column name="vfp-certificate" numcolumns="4" order="100">
+                <widget type="text" fieldname="cert_nombre" readonly="true"/>
+            </column>
+            <column name="vfp-expiry" numcolumns="2" order="110">
+                <widget type="date" fieldname="cert_vencimiento" readonly="true"/>
+            </column>
+            <column name="vfp-test-mode" description="vfp-test-mode-p" numcolumns="2" order="120">
+                <widget type="checkbox" fieldname="modo_pruebas"/>
+            </column>
+            <column name="vfp-seal" description="vfp-seal-p" numcolumns="2" order="130">
+                <widget type="checkbox" fieldname="sello"/>
+            </column>
+            <column name="vfp-mode" numcolumns="2" order="140">
+                <widget type="select" fieldname="modo" translate="true">
+                    <values title="vfp-mode-verifactu">verifactu</values>
+                    <values title="vfp-mode-off">desactivado</values>
+                </widget>
+            </column>
+        </group>
+    </columns>
+    <modals>
+        <group name="vfp-cert" title="vfp-change-certificate" icon="fa-solid fa-certificate">
+            <column name="vfp-cert-file" description="vfp-cert-file-p" numcolumns="12" order="100">
+                <widget type="file" fieldname="vfpcertfile" accept=".p12,.pfx" required="true"/>
+            </column>
+            <column name="vfp-cert-password" numcolumns="12" order="110">
+                <widget type="password" fieldname="vfpcertpass" icon="fa-solid fa-key" required="true"/>
+            </column>
+        </group>
+    </modals>
+</view>

@@ -1,0 +1,150 @@
+{% extends "Master/MicroTemplate.html.twig" %}
+
+{% block fullBody %}
+    <body class="fl-login">
+    {% include 'Macro/Toasts.html.twig' %}
+    {% from 'Macro/Utils.html.twig' import message as showMessage %}
+    <style>
+        .fl-login .fl-card.fl-wide { max-width: 44rem; }
+        .fl-acp-tabla { font-size: .9375rem; }
+        .fl-acp-tabla th { color: var(--fl-muted); font-weight: 600; white-space: nowrap; }
+        .fl-acp-tabla td.num, .fl-acp-tabla th.num { text-align: right; white-space: nowrap; }
+        .fl-acp-ev { font-size: .8125rem; color: var(--fl-muted); border-left: 3px solid var(--fl-line); padding-left: .75rem; }
+        .fl-acp-ev code { word-break: break-all; }
+    </style>
+    <main>
+        <div class="w-100" style="max-width:44rem">
+            <div role="status">
+                {{ showMessage(log, ['error', 'critical'], 'danger') }}
+                {{ showMessage(log, ['warning'], 'warning') }}
+                {{ showMessage(log, ['notice'], 'success') }}
+            </div>
+            <div class="fl-card fl-wide">
+                <img class="fl-logo" src="{{ asset('Dinamic/Assets/Images/horizontal-logo.png') }}" alt="Facturalo"/>
+
+                {% if fsc.step == 'ver' %}
+                    {% set doc = fsc.doc %}
+                    <h1 class="h4">{{ trans('aceptacion-presupuesto') }} {{ doc.codigo }}</h1>
+                    <p class="fl-sub mb-3">
+                        {{ fsc.empresa.nombre }} · {{ doc.fecha }}
+                        {% if doc.finoferta %}· {{ trans('aceptacion-valido-hasta') }} {{ doc.finoferta }}{% endif %}
+                    </p>
+                    <p class="mb-3"><strong>{{ doc.nombrecliente }}</strong>{% if doc.cifnif %} · {{ doc.cifnif }}{% endif %}</p>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm fl-acp-tabla">
+                            <thead>
+                            <tr>
+                                <th>{{ trans('description') }}</th>
+                                <th class="num">{{ trans('quantity') }}</th>
+                                <th class="num">{{ trans('price') }}</th>
+                                <th class="num">{{ trans('aceptacion-dto') }}</th>
+                                <th class="num">{{ trans('aceptacion-iva') }}</th>
+                                <th class="num">{{ trans('aceptacion-importe') }}</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for l in fsc.lines %}
+                                <tr>
+                                    <td>{{ l.descripcion }}</td>
+                                    <td class="num">{{ number(l.cantidad) }}</td>
+                                    <td class="num">{{ money(l.pvpunitario, doc.coddivisa) }}</td>
+                                    <td class="num">{% if l.dtopor %}{{ number(l.dtopor) }}%{% endif %}</td>
+                                    <td class="num">{{ number(l.iva) }}%</td>
+                                    <td class="num">{{ money(l.pvptotal, doc.coddivisa) }}</td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                            <tfoot>
+                            <tr><th colspan="5" class="num">{{ trans('net') }}</th><td class="num">{{ money(doc.neto, doc.coddivisa) }}</td></tr>
+                            <tr><th colspan="5" class="num">{{ trans('aceptacion-iva') }}</th><td class="num">{{ money(doc.totaliva, doc.coddivisa) }}</td></tr>
+                            <tr><th colspan="5" class="num">{{ trans('total') }}</th><td class="num"><strong>{{ money(doc.total, doc.coddivisa) }}</strong></td></tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    {% if doc.observaciones %}
+                        <h2 class="h6 mt-3">{{ trans('aceptacion-condiciones') }}</h2>
+                        <p>{{ doc.observaciones|e|nl2br }}</p>
+                    {% endif %}
+
+                    <hr>
+                    {% if fsc.formError %}
+                        <div class="alert alert-danger" role="alert">{{ trans(fsc.formError) }}</div>
+                    {% endif %}
+                    <form action="{{ asset('AceptarPresupuesto') }}" method="post" class="mb-3 fl-acp-form">
+                        {{ formToken() }}
+                        <input type="hidden" name="t" value="{{ fsc.token }}">
+                        <input type="hidden" name="action" value="aceptar">
+                        <h2 class="h5">{{ trans('aceptacion-aceptar-titulo') }}</h2>
+                        <div class="mb-3">
+                            <label for="nombre" class="form-label">{{ trans('aceptacion-nombre') }}</label>
+                            <input type="text" id="nombre" name="nombre" class="form-control form-control-lg" minlength="3" maxlength="150"
+                                   required autocomplete="name"/>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="conforme" name="conforme" value="1" required>
+                            <label class="form-check-label" for="conforme">{{ trans('aceptacion-conforme', {'%codigo%': doc.codigo, '%total%': money(doc.total, doc.coddivisa)}) }}</label>
+                        </div>
+                        <button type="submit" class="btn btn-lg btn-primary w-100">{{ trans('aceptacion-boton-aceptar') }}</button>
+                    </form>
+
+                    <details class="mb-3">
+                        <summary class="text-muted">{{ trans('aceptacion-rechazar-titulo') }}</summary>
+                        <form action="{{ asset('AceptarPresupuesto') }}" method="post" class="mt-2 fl-acp-form">
+                            {{ formToken() }}
+                            <input type="hidden" name="t" value="{{ fsc.token }}">
+                            <input type="hidden" name="action" value="rechazar">
+                            <label for="motivo" class="form-label">{{ trans('aceptacion-motivo') }}</label>
+                            <textarea id="motivo" name="motivo" class="form-control mb-2" rows="2" maxlength="1000"></textarea>
+                            <button type="submit" class="btn btn-outline-secondary w-100">{{ trans('aceptacion-boton-rechazar') }}</button>
+                        </form>
+                    </details>
+
+                    <p class="fl-acp-ev mb-0">{{ trans('aceptacion-evidencia-explicacion') }}</p>
+
+                {% elseif fsc.step == 'aceptado' %}
+                    <h1 class="h4">{{ trans('aceptacion-gracias-titulo') }}</h1>
+                    <p class="fl-sub">{{ trans('aceptacion-gracias-texto', {'%codigo%': fsc.doc.codigo}) }}</p>
+                    <div class="fl-acp-ev">
+                        <p class="mb-1">{{ trans('aceptacion-evidencia-registrada') }}</p>
+                        <ul class="mb-1">
+                            <li>{{ trans('aceptacion-ev-nombre') }}: {{ fsc.row.nombre }}</li>
+                            <li>{{ trans('aceptacion-ev-fecha') }}: {{ fsc.row.resuelto|date('d-m-Y H:i:s') }}</li>
+                            <li>{{ trans('aceptacion-ev-huella') }}: <code>{{ fsc.huella() }}</code></li>
+                        </ul>
+                        <p class="mb-0">{{ trans('aceptacion-evidencia-explicacion') }}</p>
+                    </div>
+                {% elseif fsc.step == 'rechazado' %}
+                    <h1 class="h4">{{ trans('aceptacion-rechazado-titulo') }}</h1>
+                    <p class="fl-sub">{{ trans('aceptacion-rechazado-texto', {'%codigo%': fsc.doc.codigo}) }}</p>
+                {% elseif fsc.step == 'usado' %}
+                    <h1 class="h4">{{ trans('aceptacion-usado-titulo') }}</h1>
+                    <p class="fl-sub">{{ trans('aceptacion-usado-texto') }}</p>
+                {% elseif fsc.step == 'caducado' %}
+                    <h1 class="h4">{{ trans('aceptacion-caducado-titulo') }}</h1>
+                    <p class="fl-sub">{{ trans('aceptacion-caducado-texto', {'%empresa%': fsc.empresa.nombre}) }}</p>
+                {% elseif fsc.step == 'invalidado' %}
+                    <h1 class="h4">{{ trans('aceptacion-invalidado-titulo') }}</h1>
+                    <p class="fl-sub">{{ trans('aceptacion-invalidado-texto', {'%empresa%': fsc.empresa.nombre}) }}</p>
+                {% elseif fsc.step == 'limite' %}
+                    <h1 class="h4">{{ trans('aceptacion-limite-titulo') }}</h1>
+                    <p class="fl-sub">{{ trans('aceptacion-limite-texto') }}</p>
+                {% else %}
+                    <h1 class="h4">{{ trans('aceptacion-invalido-titulo') }}</h1>
+                    <p class="fl-sub">{{ trans('aceptacion-invalido-texto') }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+    <footer>Facturalo · RED TELECOM CONECTA, S.L.</footer>
+    <script>
+        // un solo envío por formulario (doble clic)
+        document.querySelectorAll('.fl-acp-form').forEach(function (f) {
+            f.addEventListener('submit', function () {
+                f.querySelectorAll('button[type=submit]').forEach(function (b) { b.disabled = true; });
+            });
+        });
+    </script>
+    </body>
+{% endblock %}

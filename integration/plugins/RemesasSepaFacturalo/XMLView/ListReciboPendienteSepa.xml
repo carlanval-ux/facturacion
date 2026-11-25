@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="invoice" order="100">
+            <widget type="text" fieldname="codigofactura"/>
+        </column>
+        <column name="number" order="110">
+            <widget type="number" fieldname="numero" decimal="0"/>
+        </column>
+        <column name="customer" order="120">
+            <widget type="autocomplete" fieldname="codcliente">
+                <values source="clientes" fieldcode="codcliente" fieldtitle="nombre"/>
+            </widget>
+        </column>
+        <column name="amount" display="right" order="130">
+            <widget type="money" fieldname="importe"/>
+        </column>
+        <column name="expiration" display="right" order="140">
+            <widget type="date" fieldname="vencimiento"/>
+        </column>
+    </columns>
+    <rows>
+        <row type="status">
+            <option color="danger" fieldname="vencido" title="expired-receipt">1</option>
+        </row>
+    </rows>
+</view>

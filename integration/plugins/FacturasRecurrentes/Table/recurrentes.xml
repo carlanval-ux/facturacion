@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<table>
+    <column><name>idrecurrente</name><type>serial</type><null>NO</null></column>
+    <column><name>nombre</name><type>character varying(100)</type><null>NO</null></column>
+    <column><name>esgrupo</name><type>boolean</type><default>false</default></column>
+    <column><name>idgrupo</name><type>integer</type></column>
+    <column><name>activo</name><type>boolean</type><default>true</default></column>
+    <column><name>tipo</name><type>character varying(10)</type><default>'venta'</default></column>
+    <column><name>codcliente</name><type>character varying(10)</type></column>
+    <column><name>codproveedor</name><type>character varying(10)</type></column>
+    <column><name>tipodoc</name><type>character varying(20)</type><default>'factura'</default></column>
+    <column><name>codserie</name><type>character varying(4)</type></column>
+    <column><name>codpago</name><type>character varying(10)</type></column>
+    <column><name>observaciones</name><type>text</type></column>
+    <column><name>unidad</name><type>character varying(10)</type><default>'meses'</default></column>
+    <column><name>cada</name><type>integer</type><default>1</default></column>
+    <column><name>fecha_inicio</name><type>date</type></column>
+    <column><name>fecha_fin</name><type>date</type></column>
+    <column><name>proxima</name><type>date</type></column>
+    <column><name>pct_primero</name><type>double precision</type><default>100</default></column>
+    <column><name>fecha_pasada</name><type>character varying(10)</type><default>'ajustada'</default></column>
+    <column><name>enviar_email</name><type>boolean</type><default>false</default></column>
+    <column><name>creado</name><type>timestamp</type></column>
+    <constraint><name>recurrentes_pkey</name><type>PRIMARY KEY (idrecurrente)</type></constraint>
+</table>

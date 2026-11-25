@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<table>
+    <column>
+        <name>idremesa</name>
+        <type>serial</type>
+    </column>
+    <column>
+        <name>idempresa</name>
+        <type>integer</type>
+    </column>
+    <column>
+        <name>codigo</name>
+        <type>character varying(35)</type>
+    </column>
+    <column>
+        <name>fecha</name>
+        <type>timestamp</type>
+    </column>
+    <column>
+        <name>estado</name>
+        <type>character varying(12)</type>
+    </column>
+    <column>
+        <name>numrecibos</name>
+        <type>integer</type>
+        <default>0</default>
+    </column>
+    <column>
+        <name>total</name>
+        <type>double precision</type>
+        <default>0</default>
+    </column>
+    <column>
+        <name>nick</name>
+        <type>character varying(50)</type>
+    </column>
+    <column>
+        <name>xml</name>
+        <type>text</type>
+    </column>
+    <constraint>
+        <name>sepa_remesas_pkey</name>
+        <type>PRIMARY KEY (idremesa)</type>
+    </constraint>
+    <constraint>
+        <name>uniq_sepa_remesas_codigo</name>
+        <type>UNIQUE (codigo)</type>
+    </constraint>
+</table>

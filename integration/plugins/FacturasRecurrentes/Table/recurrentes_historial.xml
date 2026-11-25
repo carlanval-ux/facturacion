@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<table>
+    <column><name>idhistorial</name><type>serial</type><null>NO</null></column>
+    <column><name>idrecurrente</name><type>integer</type><null>NO</null></column>
+    <column><name>clave</name><type>character varying(60)</type><null>NO</null></column>
+    <column><name>fecha_prevista</name><type>date</type></column>
+    <column><name>fecha_doc</name><type>date</type></column>
+    <column><name>estado</name><type>character varying(12)</type><null>NO</null></column>
+    <column><name>intentos</name><type>integer</type><default>0</default></column>
+    <column><name>tipodoc</name><type>character varying(20)</type></column>
+    <column><name>iddoc</name><type>integer</type></column>
+    <column><name>codigo</name><type>character varying(30)</type></column>
+    <column><name>mensaje</name><type>text</type></column>
+    <column><name>envio</name><type>character varying(100)</type></column>
+    <column><name>actualizado</name><type>timestamp</type></column>
+    <constraint><name>recurrentes_historial_pkey</name><type>PRIMARY KEY (idhistorial)</type></constraint>
+    <constraint><name>recurrentes_historial_clave</name><type>UNIQUE (clave)</type></constraint>
+</table>

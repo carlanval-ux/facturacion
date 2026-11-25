@@ -1,0 +1,54 @@
+{% extends "Master/MicroTemplate.html.twig" %}
+
+{% block fullBody %}
+    <body class="fl-login">
+    {% include 'Macro/Toasts.html.twig' %}
+    {% from 'Macro/Utils.html.twig' import message as showMessage %}
+    <main>
+        <div class="w-100" style="max-width:26rem">
+            <div role="status">
+                {{ showMessage(log, ['error', 'critical'], 'danger') }}
+                {{ showMessage(log, ['warning'], 'warning') }}
+                {{ showMessage(log, ['notice'], 'success') }}
+                {{ showMessage(log, ['info'], 'info') }}
+            </div>
+            <form action="{{ asset('login') }}" method="post" class="fl-card">
+                {{ formToken() }}
+                <input type="hidden" name="action" value="login">
+                <a href="{{ asset('login') }}">{{ _self.loadLogo(settings('default','idloginimage', 0)) }}</a>
+                <h1>Entra en tu facturación</h1>
+                <p class="fl-sub">Facturas, clientes y cobros en un solo sitio.</p>
+                <div class="mb-3">
+                    <label for="fsNick" class="form-label">Usuario o email</label>
+                    <input type="text" id="fsNick" name="fsNick" class="form-control form-control-lg" maxlength="100" placeholder="Usuario o email"
+                           required autocomplete="username" autofocus/>
+                </div>
+                <div class="mb-2">
+                    <label for="fsPassword" class="form-label">Contraseña</label>
+                    <input type="password" id="fsPassword" name="fsPassword" class="form-control form-control-lg" maxlength="50"
+                           required autocomplete="current-password"/>
+                </div>
+                <p class="mb-4">
+                    <a href="{{ asset('RecuperarClave') }}">¿Has olvidado la contraseña?</a>
+                </p>
+                <button type="submit" class="btn btn-lg btn-primary w-100">Entrar</button>
+            </form>
+        </div>
+    </main>
+    <footer>Facturalo · RED TELECOM CONECTA, S.L.</footer>
+    </body>
+{% endblock %}
+
+
+
+
+{% macro loadLogo(idfile) %}
+    {% set url = 'Dinamic/Assets/Images/horizontal-logo.png' %}
+    {% if idfile > 0 %}
+        {% set attached = attachedFile(idfile) %}
+        {% if attached.filename is not empty %}
+            {% set url = attached.url('download-permanent') %}
+        {% endif %}
+    {% endif %}
+    <img class="fl-logo" src="{{ asset(url) }}" alt="Facturalo"/>
+{% endmacro loadLogo %}

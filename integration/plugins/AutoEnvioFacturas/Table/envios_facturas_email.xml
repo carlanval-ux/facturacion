@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    AutoEnvioFacturas - Envía automáticamente por email las facturas emitidas (compatible con Verifactu). Nunca envía bocetos y, en ejercicios en modo Verifactu, solo envía facturas ya registradas en Verifactu.
+
+    Copyright (C) 2026 TI53, SLU - Antonio Martín Buitrago Laguna <antoniomartin@ti53.es>
+
+    This program is free software: you can redistribute it and/or modify it under
+    the terms of the GNU Lesser General Public License as published by the Free
+    Software Foundation, either version 3 of the License, or (at your option) any
+    later version. Distributed WITHOUT ANY WARRANTY. See the GNU Lesser General
+    Public License for more details: https://www.gnu.org/licenses/
+
+    @author    Antonio Martín Buitrago Laguna <antoniomartin@ti53.es>
+    @copyright 2026 TI53, SLU
+    @license   LGPL-3.0-or-later
+-->
+<table>
+    <column>
+        <name>id</name>
+        <type>serial</type>
+    </column>
+    <column>
+        <name>idfactura</name>
+        <type>integer</type>
+    </column>
+    <column>
+        <name>codigo</name>
+        <type>character varying(30)</type>
+    </column>
+    <column>
+        <name>email</name>
+        <type>character varying(150)</type>
+    </column>
+    <column>
+        <name>fecha</name>
+        <type>timestamp</type>
+    </column>
+    <column>
+        <name>intentos</name>
+        <type>integer</type>
+        <default>0</default>
+    </column>
+    <column>
+        <name>resultado</name>
+        <type>character varying(20)</type>
+    </column>
+    <column>
+        <name>mensaje</name>
+        <type>text</type>
+    </column>
+    <constraint>
+        <name>envios_facturas_email_pkey</name>
+        <type>PRIMARY KEY (id)</type>
+    </constraint>
+</table>

@@ -1,0 +1,32 @@
+{% extends "Master/MicroTemplate.html.twig" %}
+
+{% block meta %}
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <title>{{ trans('unsubscribe-reminders') }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+{% endblock %}
+
+{% block body %}
+    <div class="container">
+        <div class="row justify-content-md-center">
+            <div class="col-md-6">
+                <div class="card mt-5 shadow-sm">
+                    <div class="card-body text-center p-4">
+                        <h1 class="h4 mb-3">{{ fsc.empresaNombre }}</h1>
+                        {% if fsc.estado == 'form' %}
+                            <p>{{ trans('unsubscribe-reminders-question') }}</p>
+                            <form method="post" action="RecordatorioBaja?c={{ fsc.codcliente | url_encode }}&t={{ fsc.token | url_encode }}">
+                                <button type="submit" class="btn btn-primary">{{ trans('unsubscribe-reminders-confirm') }}</button>
+                            </form>
+                        {% elseif fsc.estado == 'done' %}
+                            <p class="text-success mb-0">{{ trans('unsubscribe-reminders-done') }}</p>
+                        {% else %}
+                            <p class="text-danger mb-0">{{ trans('unsubscribe-reminders-invalid') }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

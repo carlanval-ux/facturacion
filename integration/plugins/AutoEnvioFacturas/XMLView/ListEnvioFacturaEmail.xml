@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    AutoEnvioFacturas - Envía automáticamente por email las facturas emitidas (compatible con Verifactu). Nunca envía bocetos y, en ejercicios en modo Verifactu, solo envía facturas ya registradas en Verifactu.
+
+    Copyright (C) 2026 TI53, SLU - Antonio Martín Buitrago Laguna <antoniomartin@ti53.es>
+
+    This program is free software: you can redistribute it and/or modify it under
+    the terms of the GNU Lesser General Public License as published by the Free
+    Software Foundation, either version 3 of the License, or (at your option) any
+    later version. Distributed WITHOUT ANY WARRANTY. See the GNU Lesser General
+    Public License for more details: https://www.gnu.org/licenses/
+
+    @author    Antonio Martín Buitrago Laguna <antoniomartin@ti53.es>
+    @copyright 2026 TI53, SLU
+    @license   LGPL-3.0-or-later
+-->
+<view>
+    <columns>
+        <column name="code" order="100">
+            <widget type="text" fieldname="codigo"/>
+        </column>
+        <column name="email" order="110">
+            <widget type="text" fieldname="email"/>
+        </column>
+        <column name="date" order="120">
+            <widget type="datetime" fieldname="fecha"/>
+        </column>
+        <column name="attempts" display="right" order="130">
+            <widget type="number" fieldname="intentos" decimal="0"/>
+        </column>
+        <column name="result" order="140">
+            <widget type="text" fieldname="resultado"/>
+        </column>
+        <column name="message" order="150">
+            <widget type="text" fieldname="mensaje"/>
+        </column>
+    </columns>
+    <rows>
+        <row type="status">
+            <option color="success" fieldname="resultado">enviado</option>
+            <option color="danger" fieldname="resultado">error</option>
+            <option color="warning" fieldname="resultado">sin-email</option>
+            <option color="info" fieldname="resultado">programado</option>
+            <option color="info" fieldname="resultado">reenvio</option>
+            <option color="secondary" fieldname="resultado">esperando-verifactu</option>
+        </row>
+    </rows>
+</view>

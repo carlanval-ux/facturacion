@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="recurring-planned" order="100"><widget type="date" fieldname="fecha_prevista"/></column>
+        <column name="date" order="110"><widget type="date" fieldname="fecha_doc"/></column>
+        <column name="code" order="120"><widget type="text" fieldname="codigo"/></column>
+        <column name="recurring-result" order="130"><widget type="text" fieldname="estado"/></column>
+        <column name="recurring-attempts" display="right" order="140"><widget type="number" fieldname="intentos" decimal="0"/></column>
+        <column name="recurring-message" order="150"><widget type="text" fieldname="mensaje"/></column>
+        <column name="recurring-sent" order="160"><widget type="text" fieldname="envio"/></column>
+    </columns>
+    <rows>
+        <row type="status">
+            <option color="danger" fieldname="estado" title="error">error</option>
+            <option color="success" fieldname="estado" title="ok">ok</option>
+        </row>
+    </rows>
+</view>

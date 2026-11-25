@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<table>
+    <column>
+        <name>id</name>
+        <type>serial</type>
+        <null>NO</null>
+    </column>
+    <column>
+        <name>nombre</name>
+        <type>character varying(100)</type>
+        <null>NO</null>
+    </column>
+    <column>
+        <name>activa</name>
+        <type>boolean</type>
+        <default>true</default>
+        <null>NO</null>
+    </column>
+    <column>
+        <name>url</name>
+        <type>character varying(255)</type>
+        <null>NO</null>
+    </column>
+    <column>
+        <name>apikey</name>
+        <type>character varying(100)</type>
+        <null>NO</null>
+    </column>
+    <column>
+        <name>observaciones</name>
+        <type>text</type>
+    </column>
+    <constraint>
+        <name>instalaciones_pkey</name>
+        <type>PRIMARY KEY (id)</type>
+    </constraint>
+</table>

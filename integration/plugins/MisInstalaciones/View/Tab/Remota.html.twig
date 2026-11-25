@@ -1,0 +1,7 @@
+<div class="instalacion-remota" data-vista="{{ viewName }}" data-url="{{ fsc.url() }}" data-code="{{ fsc.getModel().id() }}"
+     data-token="{{ formToken(false) }}" data-error="{{ trans('instalacion-servidor-sin-respuesta') }}"
+     data-sesion="{{ trans('instalacion-sesion-caducada') }}" data-fallo="{{ trans('instalacion-error-servidor') }}">
+    <div class="text-center text-body-secondary py-4">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>{{ trans('loading') }}
+    </div>
+</div>

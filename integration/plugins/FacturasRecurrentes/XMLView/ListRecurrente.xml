@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="name" order="100"><widget type="text" fieldname="nombre"/></column>
+        <column name="customer" order="110"><widget type="text" fieldname="codcliente"/></column>
+        <column name="supplier" order="115"><widget type="text" fieldname="codproveedor"/></column>
+        <column name="recurring-doc-type" order="120">
+            <widget type="select" fieldname="tipodoc" translate="true">
+                <values title="recurring-invoice">factura</values>
+                <values title="recurring-delivery-note">albaran</values>
+                <values title="recurring-order">pedido</values>
+                <values title="recurring-quote">presupuesto</values>
+            </widget>
+        </column>
+        <column name="recurring-next" order="130"><widget type="date" fieldname="proxima"/></column>
+        <column name="recurring-active" display="center" order="140"><widget type="checkbox" fieldname="activo"/></column>
+    </columns>
+    <rows>
+        <row type="status"><option color="warning" fieldname="activo" title="recurring-paused">0</option></row>
+    </rows>
+</view>

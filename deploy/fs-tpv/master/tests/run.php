@@ -1,0 +1,564 @@
+<?php
+// Pruebas del agente MASTER: partes puras + dry-run completo con host simulado (SimHost). No toca ningun servidor ni DNS.
+// Ejecutar:  php deploy/fs-tpv/master/tests/run.php     (sale con codigo != 0 si algo falla)
+declare(strict_types=1);
+
+namespace FsMaster;
+
+require __DIR__ . '/../agent.php';
+
+$fail = 0;
+$total = 0;
+function ok(bool $c, string $name, string $extra = ''): void
+{
+    global $fail, $total;
+    $total++;
+    if (!$c) {
+        $fail++;
+        echo "FAIL  $name $extra\n";
+    }
+}
+
+const KEY = 'k-de-prueba-0123456789abcdef0123456789abcdef';
+const T0 = 1795600000; // instante fijo del reloj simulado
+$ULIDS = ['01JD0000000000000000000001', '01JD0000000000000000000002', '01JD0000000000000000000003', '01JD0000000000000000000004', '01JD0000000000000000000005',
+    '01JD0000000000000000000006', '01JD0000000000000000000007', '01JD0000000000000000000008', '01JD0000000000000000000009', '01JD000000000000000000000A'];
+
+// ---------- slug ----------
+foreach (['acme', 'a1', 'mi-gestoria', 'x' . str_repeat('a', 26) . 'z'] as $s) {
+    ok(slug_error($s) === null, "slug valido $s");
+}
+foreach (['a', '-ab', 'ab-', 'A', 'a_b', 'a.b', 'a b', '', str_repeat('a', 29), 'a--b', 'xn--abc', 'master', 'www', 'redtelecom', 'motor', 'teleco-test', 'fs-x', '../x', "a\nb", 'ab;rm'] as $s) {
+    ok(slug_error($s) !== null, 'slug rechazado ' . json_encode($s));
+}
+ok(slug_error(5) !== null && slug_error(null) !== null, 'slug no cadena');
+
+// ---------- firma ----------
+$doc = ['b' => 1, 'a' => ['z' => '/ñ', 'y' => [3, 2]], 'sig' => 'x'];
+ok(canonical($doc) === '{"a":{"y":[3,2],"z":"/ñ"},"b":1,"sig":"x"}', 'canonico: claves ordenadas, listas intactas, sin escapes', canonical($doc));
+$sig = fn(array $d, string $dom = 'req', string $kid = 'm1', string $key = KEY) => ['alg' => 'hmac-sha256', 'kid' => $kid, 'value' => sign($d, $key, $dom)];
+$d = ['a' => 1];
+$d['sig'] = $sig($d);
+ok(verify($d, ['m1' => KEY], 'req') === null, 'firma valida');
+ok(verify($d, ['m1' => KEY], 'resp') !== null, 'separacion de dominio req/resp');
+ok(verify($d, ['m2' => KEY], 'req') !== null, 'kid desconocido');
+ok(verify($d, ['m1' => 'corta'], 'req') !== null, 'clave corta rechazada');
+$t = $d; $t['a'] = 2;
+ok(verify($t, ['m1' => KEY], 'req') !== null, 'documento manipulado');
+$t = $d; unset($t['sig']);
+ok(verify($t, ['m1' => KEY], 'req') !== null, 'sin firma');
+$t = $d; $t['sig']['alg'] = 'none';
+ok(verify($t, ['m1' => KEY], 'req') !== null, 'alg none rechazado');
+echo 'vector de prueba (para el cliente del MASTER): canonical=' . canonical(['b' => 1, 'a' => 'x/y']) . ' hmac=' . hash_hmac('sha256', "req\n" . canonical(['b' => 1, 'a' => 'x/y']), KEY) . "\n";
+
+// ---------- validacion de peticiones ----------
+function req(string $action, array $over = [], ?string $id = null): array
+{
+    global $ULIDS;
+    $slug = $over['slug'] ?? 'acme';
+    unset($over['slug']);
+    $tn = ['id' => '01JD00000000000000000000T1', 'slug' => $slug, 'hostname' => hostname_for($slug)];
+    if ($action === 'provision') {
+        $tn += ['trade_name' => 'Acme Gestion', 'legal_name' => 'ACME GESTION SOCIEDAD LIMITADA', 'admin_email' => 'ana.lopez@acme.example', 'company' => ['cifnif' => 'B12345674', 'direccion' => 'Calle Mayor 1', 'ciudad' => 'Madrid', 'provincia' => 'Madrid', 'codpostal' => '28001']];
+    }
+    $r = ['version' => 1, 'request_id' => $id ?? $ULIDS[0], 'action' => $action, 'tenant' => $tn, 'requested_at' => gmdate('Y-m-d\TH:i:s\Z', T0), 'requested_by' => 'operador:ana'];
+    if (in_array($action, ['provision', 'entitlements'], true)) {
+        $r['entitlements'] = ['serial' => 1, 'modulos' => array_fill_keys(MODULES, false)];
+        $r['entitlements']['modulos']['impagos'] = true;
+    }
+    return array_replace_recursive($r, $over);
+}
+$v = fn(array $r) => validate_request($r, T0 + 10, $r['request_id']);
+ok($v(req('provision')) === [], 'provision valido', json_encode($v(req('provision'))));
+foreach (ACTIONS as $a) {
+    ok($v(req($a)) === [], "accion $a valida", json_encode($v(req($a))));
+}
+$bad = [
+    'campo extra' => req('suspend') + ['x' => 1],
+    'version' => req('suspend', ['version' => 2]),
+    'accion' => req('suspend', ['action' => 'deprovision']),
+    'hostname ajeno' => req('suspend', ['tenant' => ['hostname' => 'acme.evil.example']]),
+    'hostname otro slug' => req('suspend', ['tenant' => ['hostname' => 'otro.facturalo.redtelecom.app']]),
+    'tenant.id' => req('suspend', ['tenant' => ['id' => 'abc']]),
+    'caducada' => req('suspend', ['requested_at' => gmdate('Y-m-d\TH:i:s\Z', T0 - 90000)]),
+    'futuro' => req('suspend', ['requested_at' => gmdate('Y-m-d\TH:i:s\Z', T0 + 3600)]),
+    'fecha formato' => req('suspend', ['requested_at' => '2026-11-25 10:00:00']),
+    'requested_by con control' => req('suspend', ['requested_by' => "a\nb"]),
+    'entitlements en suspend' => req('suspend') + ['entitlements' => ['serial' => 1, 'modulos' => []]],
+    'modulo desconocido' => req('entitlements', ['entitlements' => ['modulos' => ['hack' => true]]]),
+    'modulo no bool' => req('entitlements', ['entitlements' => ['modulos' => ['sepa' => 'si']]]),
+    'serial 0' => req('entitlements', ['entitlements' => ['serial' => 0]]),
+    'release en suspend' => req('suspend') + ['release' => ['tag' => 'v1']],
+    'release traversal' => req('provision') + ['release' => ['tag' => '../../etc/passwd']],
+    'email malo' => req('provision', ['tenant' => ['admin_email' => 'x@y']]),
+    'company falta' => (function () { $r = req('provision'); unset($r['tenant']['company']['cifnif']); return $r; })(),
+    'company extra' => req('provision', ['tenant' => ['company' => ['x' => 'y']]]),
+    'slug reservado' => req('suspend', ['slug' => 'master', 'tenant' => ['hostname' => 'master.facturalo.redtelecom.app']]),
+];
+foreach ($bad as $n => $r) {
+    ok($v($r) !== [], "rechaza: $n");
+}
+ok(validate_request(req('suspend'), T0, '01JD0000000000000000000009') !== [], 'request_id distinto del nombre de fichero');
+ok(entitlement_settings(null) === array_combine(array_map(fn($k) => "modulos.$k", MODULES), array_fill(0, 7, '0')), 'sin entitlements = los 7 modulos a 0');
+ok(owner_nick('Ana.Lopez+x@acme.example') === 'ana.lopezx' && owner_nick('@x.es') === 'propietario', 'nick del propietario');
+
+// ---------- maquina de estados ----------
+$T = [
+    ['absent', 'provision', true, false, 'active'], ['error', 'provision', true, false, 'active'], ['provisioning', 'provision', true, false, 'active'],
+    ['active', 'provision', true, true, 'active'], ['active', 'suspend', true, false, 'suspended'], ['suspended', 'suspend', true, true, 'suspended'],
+    ['absent', 'suspend', false, false, null], ['error', 'suspend', false, false, null], ['suspended', 'reactivate', true, false, 'active'],
+    ['active', 'reactivate', true, true, 'active'], ['absent', 'reactivate', false, false, null], ['active', 'entitlements', true, false, 'active'],
+    ['suspended', 'entitlements', true, false, 'suspended'], ['absent', 'entitlements', false, false, null], ['provisioning', 'entitlements', false, false, null],
+    ['absent', 'status', true, false, 'absent'], ['active', 'deprovision-dry-run', true, false, 'active'],
+];
+foreach ($T as [$s, $a, $okv, $noop, $next]) {
+    $r = transition($s, $a);
+    ok($r['ok'] === $okv && $r['noop'] === $noop && $r['next'] === $next, "transicion $s --$a-->", json_encode($r));
+}
+
+// ---------- agente en dry-run con SimHost ----------
+$tmp = sys_get_temp_dir() . '/fsm-' . bin2hex(random_bytes(4));
+$mk = function (int $ts = T0 + 20, array $conf = []) use ($tmp): array {
+    $d = $tmp . '/' . bin2hex(random_bytes(3));
+    foreach (['q/requests', 'q/responses', 'keys', 'w'] as $s) {
+        mkdir("$d/$s", 0700, true);
+    }
+    file_put_contents("$d/keys/m1.key", KEY);
+    $h = new SimHost();
+    $h->dns['acme.facturalo.redtelecom.app'] = ['151.80.149.132'];
+    $h->files['/home/ploi/fs-releases/v1.tar.gz'] = 'x';
+    $h->files['/home/ploi/fs-releases/v1.tar.gz.sha256'] = 'x';
+    $h->files['/etc/fs-master/default-release'] = "v1\n";
+    $h->files['/etc/fs-master/email-template.json'] = json_encode(['email' => 'noreply@acme.example', 'host' => 'smtp.acme.example', 'port' => 587, 'password' => 'CLAVE-SECRETA-SMTP', 'mailer' => 'SMTP']);
+    foreach (array_merge(Agent::CONF_DEFAULTS['plugins_base'], array_values(MODULE_PLUGINS), Agent::CONF_DEFAULTS['plugins_extra']) as $pl) {
+        $h->files["/srv/fs/acme/current/Plugins/$pl"] = 'dir';   // la release lleva todos los plugins (se quita alguno en pruebas concretas)
+    }
+    $now = $ts;
+    $a = new Agent(array_merge(Agent::CONF_DEFAULTS, ['queue' => "$d/q", 'work' => "$d/w", 'keys' => "$d/keys"], $conf), $h, function () use (&$now) { return $now; },
+        function (int $s) use (&$now, $h) { $now += $s; $h->log[] = "sleep $s"; });
+    return [$d, $h, $a];
+};
+$drop = function (string $d, array $r, ?string $key = KEY) {
+    if ($key) {
+        $r['sig'] = ['alg' => 'hmac-sha256', 'kid' => 'm1', 'value' => sign($r, $key, 'req')];
+    }
+    file_put_contents("$d/q/requests/{$r['request_id']}.json", json_encode($r));
+};
+$resp = fn(string $d, string $id) => json_decode((string)file_get_contents("$d/q/responses/$id.json"), true);
+$names = fn(array $r) => array_map(fn($s) => $s['name'] . ':' . $s['status'], $r['steps']);
+
+// 1) provision completo
+[$d, $h, $a] = $mk();
+$drop($d, req('provision'));
+ok($a->runOnce() === 1, 'se atiende 1 peticion');
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'succeeded' && $r['tenant_state'] === 'active', 'provision: succeeded/active', json_encode($r['error'] ?? null));
+ok(verify($r, ['m1' => KEY], 'resp') === null, 'la respuesta va firmada (dominio resp)');
+ok($names($r) === ['preflight:ok', 'bind:ok', 'provision:ok', 'bootstrap:ok', 'deploy:ok', 'plugins:ok', 'company:ok', 'ejercicio:ok', 'email:ok', 'entitlements:ok', 'verify:ok', 'admin:ok'], 'orden de pasos', implode(',', $names($r)));
+$pw = $r['result']['admin']['initial_password'] ?? '';
+ok(strlen($pw) === 20 && $r['result']['admin']['nick'] === 'ana.lopez', 'admin creado con clave inicial de 20 car.');
+ok(!str_contains(json_encode($h->log), $pw), 'la clave en claro no aparece en comandos ni SQL (solo hash)');
+$cmds = array_values(array_filter($h->log, fn($l) => str_starts_with($l, 'exec /usr/local/sbin')));
+ok(count($cmds) === 3 && str_contains($cmds[0], 'fs-provision-tenant acme acme.facturalo.redtelecom.app /home/ploi/fs-releases/v1.tar.gz') && str_contains($cmds[1], 'fs-bootstrap-tenant acme') && str_contains($cmds[1], 'FS_EXTRA_PLUGINS') && str_contains($cmds[2], 'fs-deploy-release acme'), 'comandos de host en orden', implode(' | ', $cmds));
+$settings = array_filter($h->log, fn($l) => str_starts_with($l, 'sql fs_acme: INSERT INTO settings') && str_contains($l, "'facturalo'"));
+ok(count($settings) === 7, '7 ajustes facturalo.modulos.* escritos', (string)count($settings));
+ok(str_contains(implode("\n", $settings), '["modulos.impagos","1"') && str_contains(implode("\n", $settings), '["modulos.sepa","0"'), 'impagos=1, sepa=0');
+$bind = json_decode($h->files['/etc/fs/tenants/acme.master.json'], true);
+ok($bind['state'] === 'active' && $bind['tenant_id'] === '01JD00000000000000000000T1' && $bind['entitlements_serial'] === 1, 'registro slug<->tenant en active');
+ok(!str_contains((string)file_get_contents("$d/w/state/{$ULIDS[0]}.json"), $pw), 'la clave inicial se borra del estado tras entregarla');
+// auditoria: cadena de hashes
+$lines = file("$d/w/audit.log", FILE_IGNORE_NEW_LINES);
+$prev = '';
+$chain = true;
+foreach ($lines as $l) {
+    $j = json_decode($l, true);
+    $h2 = $j['hash'];
+    unset($j['hash']);
+    $chain = $chain && $j['prev'] === $prev && hash('sha256', canonical($j)) === $h2;
+    $prev = $h2;
+}
+ok($lines && $chain, 'auditoria encadenada e integra');
+
+// 2) idempotencia: misma peticion otra vez -> sin comandos nuevos, respuesta intacta
+$before = count($h->log);
+$respRaw = file_get_contents("$d/q/responses/{$ULIDS[0]}.json");
+$drop($d, req('provision'));
+$a->runOnce();
+ok(count($h->log) === $before && $respRaw === file_get_contents("$d/q/responses/{$ULIDS[0]}.json") && !is_file("$d/q/requests/{$ULIDS[0]}.json"), 'replay del mismo request_id: no se re-ejecuta');
+// provision otra vez con id nuevo sobre tenant activo = noop
+$drop($d, req('provision', [], $ULIDS[1]));
+$a->runOnce();
+$r = $resp($d, $ULIDS[1]);
+ok($r['status'] === 'succeeded' && $r['result']['noop'] === true && count($h->log) === $before, 'provision sobre tenant activo: noop sin comandos');
+// request_id reutilizado con otro contenido (misma id, otro payload, sin respuesta previa de ese contenido)
+$drop($d, req('suspend', [], $ULIDS[2]));
+$a->runOnce();
+ok($resp($d, $ULIDS[2])['status'] === 'succeeded' && $resp($d, $ULIDS[2])['tenant_state'] === 'suspended', 'suspend: active -> suspended');
+ok(str_contains($h->files['/etc/fs/suspend/acme.conf'], 'return 503') && str_contains($h->files['/etc/nginx/sites-available/fs-acme.conf'], 'include /etc/fs/suspend/acme.conf;'), 'suspension: fragmento 503 enganchado al vhost');
+$drop($d, req('suspend', [], $ULIDS[3]));
+$a->runOnce();
+ok($resp($d, $ULIDS[3])['result']['noop'] === true, 'suspend sobre suspendido: noop');
+$drop($d, req('reactivate', [], $ULIDS[4]));
+$a->runOnce();
+ok($resp($d, $ULIDS[4])['tenant_state'] === 'active' && str_contains($h->files['/etc/fs/suspend/acme.conf'], 'activo') && substr_count($h->files['/etc/nginx/sites-available/fs-acme.conf'], 'include /etc/fs/suspend') === 1, 'reactivate: vuelve a activo y el include no se duplica');
+// entitlements: serial creciente
+$drop($d, req('entitlements', ['entitlements' => ['serial' => 2, 'modulos' => ['sepa' => true]]], $ULIDS[5]));
+$a->runOnce();
+$r = $resp($d, $ULIDS[5]);
+ok($r['status'] === 'succeeded' && $r['result']['entitlements']['modulos']['sepa'] === true, 'entitlements aplicados');
+$drop($d, req('entitlements', ['entitlements' => ['serial' => 2]], $ULIDS[6]));
+$a->runOnce();
+$r = $resp($d, $ULIDS[6]);
+ok($r['status'] === 'failed' && $r['error']['code'] === 'SERIAL_NOT_NEWER', 'entitlements con serial no creciente: rechazado');
+// status y dry-run de baja
+$drop($d, req('status', [], $ULIDS[7]));
+$drop($d, req('deprovision-dry-run', [], $ULIDS[8]));
+$n0 = count(array_filter($h->log, fn($l) => str_starts_with($l, 'remove ')));
+$a->runOnce();
+ok($resp($d, $ULIDS[7])['result']['state'] === 'active', 'status');
+$dr = $resp($d, $ULIDS[8]);
+ok($dr['status'] === 'succeeded' && count($dr['result']['would_remove']) >= 5 && count(array_filter($h->log, fn($l) => str_starts_with($l, 'remove '))) === $n0, 'deprovision: solo simulacion, no borra nada');
+ok(!array_filter($h->log, fn($l) => preg_match('/userdel|rm -rf|DROP |rmdir/', $l)), 'ningun comando destructivo en todo el log');
+
+// 3) rechazos: firma, protegidos, slug de otro tenant, slug ocupado, estado
+[$d, $h, $a] = $mk();
+$drop($d, req('provision'), 'otra-clave-distinta-0123456789abcdef0123456789');
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'rejected' && $r['error']['code'] === 'BAD_SIGNATURE' && $h->log === [], 'firma incorrecta: rechazada sin tocar el host');
+$drop($d, req('provision', [], $ULIDS[1]), null);
+$a->runOnce();
+ok($resp($d, $ULIDS[1])['error']['code'] === 'BAD_SIGNATURE', 'sin firma: rechazada');
+file_put_contents("$d/q/requests/{$ULIDS[2]}.json", '{no json');
+$a->runOnce();
+ok($resp($d, $ULIDS[2])['error']['code'] === 'BAD_JSON', 'JSON roto: rechazado');
+$p = req('suspend', ['tenant' => ['slug' => 'carlos', 'hostname' => 'carlos.facturalo.redtelecom.app']], $ULIDS[3]);
+$drop($d, $p);
+$a->runOnce();
+ok($resp($d, $ULIDS[3])['error']['code'] === 'PROTECTED' && $h->log === [], 'tenant protegido (carlos): intocable');
+$h->files['/srv/fs/acme/current'] = 'x';
+$drop($d, req('provision', [], $ULIDS[4]));
+$a->runOnce();
+ok($resp($d, $ULIDS[4])['error']['code'] === 'SLUG_TAKEN' && $h->log === [], 'slug ocupado por instalacion no gestionada: rechazado');
+unset($h->files['/srv/fs/acme/current']);
+$h->files['/etc/fs/tenants/acme.master.json'] = json_encode(['tenant_id' => '01JD00000000000000000000T9', 'state' => 'active']);
+$drop($d, req('suspend', [], $ULIDS[5]));
+$a->runOnce();
+ok($resp($d, $ULIDS[5])['error']['code'] === 'SLUG_BOUND', 'slug ligado a otro tenant: rechazado');
+unset($h->files['/etc/fs/tenants/acme.master.json']);
+$drop($d, req('suspend', [], $ULIDS[6]));
+$a->runOnce();
+ok($resp($d, $ULIDS[6])['error']['code'] === 'BAD_STATE', 'suspend de tenant inexistente: BAD_STATE');
+$drop($d, req('provision', ['requested_at' => gmdate('Y-m-d\TH:i:s\Z', T0 - 90000)], $ULIDS[7]));
+$a->runOnce();
+ok($resp($d, $ULIDS[7])['error']['code'] === 'INVALID', 'peticion caducada firmada: INVALID');
+
+// 4) fallo a mitad de alta: rollback reversible y reintento con id nuevo reanuda
+[$d, $h, $a] = $mk();
+$h->scripted['/usr/local/sbin/fs-bootstrap-tenant'] = [1, 'certbot: fallo de desafio'];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'failed' && $r['tenant_state'] === 'error' && $r['error']['step'] === 'bootstrap' && $r['error']['code'] === 'BOOTSTRAP_FAILED', 'fallo en bootstrap: failed/error', json_encode($r['error'] ?? null));
+ok(str_contains($r['result']['rollback'], 'vhost conservado') && !in_array('remove /etc/nginx/sites-enabled/fs-acme.conf', $h->log, true), 'rollback tras bootstrap: el vhost NO se quita (instalacion parcial)');
+ok($r['error']['retryable'] === true && count(array_filter($h->log, fn($l) => str_starts_with($l, 'exec /usr/local/sbin/fs-bootstrap-tenant'))) === 3 && array_values(array_filter($h->log, fn($l) => str_starts_with($l, 'sleep 1') || $l === 'sleep 30')) === ['sleep 10', 'sleep 30'], 'bootstrap: 3 intentos con espera creciente (10 s, 30 s), reintentable');
+ok(str_contains($r['error']['output'], 'intento 1/3: salida 1') && str_contains($r['error']['output'], 'intento 3/3') && str_contains($r['error']['output'], 'certbot: fallo de desafio'), 'error.output lleva la salida de los 3 intentos');
+ok(($r['error']['log'] ?? '') === "/var/log/fs-master/{$ULIDS[0]}-bootstrap.log" && str_contains((string)($h->files[$r['error']['log']] ?? ''), 'certbot: fallo de desafio'), 'log del host con la salida completa');
+ok(json_decode($h->files['/etc/fs/tenants/acme.master.json'], true)['last_error']['code'] === 'BOOTSTRAP_FAILED', 'el registro recuerda el ultimo error');
+ok(!array_filter($h->log, fn($l) => preg_match('/userdel|rm -rf|DROP /', $l)) && isset($h->files['/srv/fs/acme/current']), 'rollback no borra datos');
+ok(json_decode($h->files['/etc/fs/tenants/acme.master.json'], true)['state'] === 'error', 'registro en error');
+unset($h->scripted['/usr/local/sbin/fs-bootstrap-tenant']);
+$h->log = [];
+$drop($d, req('provision', [], $ULIDS[1]));
+$a->runOnce();
+$r = $resp($d, $ULIDS[1]);
+ok($r['status'] === 'succeeded' && $r['tenant_state'] === 'active', 'reintento con request_id nuevo: succeeded');
+ok(!array_filter($h->log, fn($l) => str_contains($l, 'fs-provision-tenant')) && in_array('exec ln -sfn /etc/nginx/sites-available/fs-acme.conf /etc/nginx/sites-enabled/fs-acme.conf', $h->log, true), 'el reintento no re-aprovisiona: reactiva el vhost y sigue en bootstrap');
+
+// 5) DNS no listo y release ausente
+[$d, $h, $a] = $mk();
+$h->dns = [];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'failed' && $r['error']['code'] === 'DNS_NOT_READY' && $r['error']['retryable'] === true && !array_filter($h->log, fn($l) => str_starts_with($l, 'exec /usr/local/sbin')), 'DNS sin resolver: DNS_NOT_READY reintentable, nada creado');
+$h->dns['acme.facturalo.redtelecom.app'] = ['151.80.149.132'];
+unset($h->files['/home/ploi/fs-releases/v1.tar.gz.sha256']);
+$drop($d, req('provision', [], $ULIDS[1]));
+$a->runOnce();
+ok($resp($d, $ULIDS[1])['error']['code'] === 'RELEASE_MISSING', 'release sin .sha256: RELEASE_MISSING');
+ok(!array_filter($h->log, fn($l) => str_contains($l, 'fs-provision-tenant')), 'sin release no se aprovisiona');
+
+
+// ---------- correo (paso email) ----------
+ok(email_template_errors(null) !== [] && email_template_errors('{no') !== [] && email_template_errors('[]') !== [], 'plantilla de correo: ausente/ilegible/lista rechazadas');
+ok(email_template_errors('{"email":"a@b.es","host":"smtp.b.es","password":"x"}') === [], 'plantilla de correo valida');
+ok(email_template_errors('{"email":"a@b.es","host":"smtp.b.es"}') !== [], 'plantilla sin password rechazada');
+ok(email_template_errors('{"email":"a@b.es","host":"x;rm -rf /","password":"x"}') !== [], 'plantilla con host malicioso rechazada');
+ok(email_template_errors('{"email":"a@b.es","host":"h.es","password":"x","port":99999}') !== [], 'plantilla con puerto invalido rechazada');
+ok(!str_contains(implode(' ', email_template_errors('{"email":"","host":"h.es","password":"SECRETO"}')), 'SECRETO'), 'los errores de plantilla no incluyen valores');
+// el alta del bloque 1 ya tiene: orden con email, parametros ocultos y sin secreto en el log
+[$d, $h, $a] = $mk();
+$drop($d, req('provision'));
+$a->runOnce();
+ok(!str_contains(json_encode($h->log), 'CLAVE-SECRETA-SMTP'), 'la clave SMTP no aparece en ningun log/comando');
+ok(count(array_filter($h->log, fn($l) => str_contains($l, "INSERT INTO settings (name, properties) VALUES ('email'") && str_ends_with($l, '[params ocultos]'))) === 1, 'ajustes de correo escritos una vez con parametros ocultos');
+ok(count(array_filter($h->log, fn($l) => str_starts_with($l, 'exec timeout 8 bash'))) === 1, 'comprobacion TCP del SMTP');
+ok(!str_contains((string)file_get_contents("$d/q/responses/{$ULIDS[0]}.json"), 'CLAVE-SECRETA-SMTP'), 'la respuesta no contiene la clave SMTP');
+$drop($d, req('status', [], $ULIDS[1]));
+$a->runOnce();
+ok($resp($d, $ULIDS[1])['result']['email_configured'] === true, 'status: email_configured=true');
+$h->emailRow = [];
+$drop($d, req('status', [], $ULIDS[2]));
+$a->runOnce();
+ok($resp($d, $ULIDS[2])['result']['email_configured'] === false, 'status: email_configured=false sin ajustes');
+// plantilla ausente: falla en preflight, antes de crear nada
+[$d, $h, $a] = $mk();
+unset($h->files['/etc/fs-master/email-template.json']);
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'failed' && $r['error']['code'] === 'EMAIL_TEMPLATE_MISSING' && !array_filter($h->log, fn($l) => str_starts_with($l, 'exec /usr/local/sbin')), 'sin plantilla de correo: falla en preflight sin crear nada');
+// plantilla aplicada pero sigue sin correo => fallo y rollback
+[$d, $h, $a] = $mk();
+$h->emailRow = [];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'failed' && $r['error']['step'] === 'email' && $r['error']['code'] === 'EMAIL_NOT_CONFIGURED' && $r['tenant_state'] === 'error', 'correo no configurado tras aplicar: failed/error');
+// SMTP inalcanzable: reintentable
+[$d, $h, $a] = $mk();
+$h->scripted['timeout 8 bash'] = [124, ''];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['error']['code'] === 'EMAIL_SMTP_UNREACHABLE' && $r['error']['retryable'] === true, 'SMTP inalcanzable: reintentable');
+
+
+// ---------- razon social censal ----------
+foreach (['ACME GESTION SOCIEDAD LIMITADA', 'LANDAETA VALDIVIA CARLOS MIGUEL', 'MUÑOZ PEÑA, JOSÉ & HIJOS S.L.', 'ÁLVAREZ-NÚÑEZ 2000 SA', 'CLARTO'] as $n) {
+    ok(legal_name_error($n) === null, "razon social valida: $n");
+}
+foreach (['', 'Clarto', 'Landaeta Valdivia Carlos', 'ACME  SL', ' ACME SL', 'ACME SL ', '-ACME', 'ACME <SL>', "ACME\nSL", 'ACME;DROP', str_repeat('A', 101)] as $n) {
+    ok(legal_name_error($n) !== null, 'razon social rechazada ' . json_encode($n));
+}
+ok(legal_name_error(null) !== null, 'razon social obligatoria');
+$r = req('provision');
+unset($r['tenant']['legal_name']);
+ok($v($r) !== [], 'provision sin legal_name: rechazado');
+ok($v(req('provision', ['tenant' => ['legal_name' => 'Clarto']])) !== [], 'provision con nombre comercial en minusculas como legal_name: rechazado');
+ok($v(req('suspend', ['tenant' => ['legal_name' => 'ACME SL']])) !== [], 'legal_name fuera de provision: rechazado');
+[$d, $h, $a] = $mk();
+$drop($d, req('provision'));
+$a->runOnce();
+$u = array_values(array_filter($h->log, fn($l) => str_contains($l, 'UPDATE empresas')))[0] ?? '';
+ok(str_contains($u, '["ACME GESTION SOCIEDAD LIMITADA","Acme Gestion"'), 'Empresa.nombre = razon social censal; nombrecorto = nombre comercial', $u);
+
+
+// ---------- ejercicios (paso ejercicio) ----------
+$E = fn(string $c, string $i, string $f, int $l = 10) => ['codejercicio' => $c, 'fechainicio' => $i, 'fechafin' => $f, 'longsubcuenta' => $l];
+$p = exercises_to_create([$E('2026', '2026-01-01', '2026-12-31', 9)], 2026);
+ok(count($p['crear']) === 1 && $p['crear'][0]['codejercicio'] === '2027' && $p['crear'][0]['longsubcuenta'] === 9 && $p['existentes'] === ['2026'], 'solo se crea el siguiente; hereda longsubcuenta del mas reciente');
+$p = exercises_to_create([], 2026);
+ok(array_column($p['crear'], 'codejercicio') === ['2026', '2027'] && $p['crear'][0]['longsubcuenta'] === 10 && $p['crear'][1]['fechafin'] === '2027-12-31', 'sin ejercicios: crea el actual y el siguiente');
+$p = exercises_to_create([$E('2026', '2026-01-01', '2026-12-31'), $E('2027', '2027-01-01', '2027-12-31')], 2026);
+ok($p['crear'] === [] && $p['existentes'] === ['2026', '2027'], 'ya cubiertos: no crea nada (idempotente)');
+$p = exercises_to_create([$E('A', '2026-07-01', '2027-06-30')], 2026);
+ok(count($p['crear']) === 0 || $p['crear'][0]['codejercicio'] !== '2026', 'un ejercicio partido que se solapa no se toca ni se duplica');
+$p = exercises_to_create([$E('2027', '2025-01-01', '2025-12-31')], 2026);
+ok(array_column($p['crear'], 'codejercicio') === ['2026', '0027'], 'codigo ocupado por otro ejercicio: alternativa 00yy', json_encode($p));
+$p = exercises_to_create([$E('2027', '2025-01-01', '2025-12-31'), $E('0027', '2024-01-01', '2024-12-31')], 2026);
+ok($p['crear'][0]['codejercicio'] === '2026' && $p['error'] !== null, 'sin codigo libre: error');
+// agente
+[$d, $h, $a] = $mk();
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+$ins = array_values(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO ejercicios')));
+ok($r['status'] === 'succeeded' && count($ins) === 1 && str_contains($ins[0], '["2027","2027","2027-01-01","2027-12-31",10]'), 'alta: crea solo 2027 (2026 ya existia, no se toca)', json_encode($ins));
+ok(count(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO cuentas') || str_contains($l, 'UPDATE cuentas h JOIN') || str_contains($l, 'INSERT INTO subcuentas'))) === 3, 'plan copiado: cuentas, parent remapeado y subcuentas');
+ok($r['result']['ejercicios']['creados'] === ['2027'] && $r['result']['ejercicios']['plan_copiado'] === true, 'resultado: ejercicios creados');
+ok(!array_filter($h->log, fn($l) => preg_match('/(UPDATE|DELETE).*ejercicios/', $l)), 'nunca se modifica ni borra un ejercicio existente');
+// sin ejercicios y sin plan base
+[$d, $h, $a] = $mk();
+$h->ejercicios = [];
+$h->planBase = [];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok(count(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO ejercicios'))) === 2 && !array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO cuentas')) && $r['result']['ejercicios']['plan_copiado'] === false, 'sin plan base: crea 2026 y 2027 sin copiar plan (lo avisa)');
+// 31/12 23:30 UTC = 1/1 en Madrid: el "ano en curso" ya es el nuevo
+[$d, $h, $a] = $mk(strtotime('2026-12-31T23:30:00Z'));
+$drop($d, req('provision', ['requested_at' => '2026-12-31T23:20:00Z']));
+$a->runOnce();
+$ins = array_values(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO ejercicios')));
+ok(count($ins) === 2 && str_contains($ins[0], '"2027"') && str_contains($ins[1], '"2028"'), 'zona Europe/Madrid: el 1/1 local cuenta como ano nuevo', json_encode($ins));
+
+// accion ejercicio (reconciliacion anual, p. ej. el MASTER la envia a todos los tenants el 1/1)
+[$d, $h, $a] = $mk(strtotime('2027-01-01T09:00:00Z'));
+$h->files['/etc/fs/tenants/acme.master.json'] = json_encode(['tenant_id' => '01JD00000000000000000000T1', 'state' => 'active']);
+$h->files['/srv/fs/acme/current'] = 'x';
+$drop($d, req('ejercicio', ['requested_at' => '2027-01-01T08:59:00Z']));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+$ins = array_values(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO ejercicios')));
+ok($r['status'] === 'succeeded' && count($ins) === 2 && str_contains($ins[0], '"2027"') && str_contains($ins[1], '"2028"'), 'accion ejercicio el 1/1: crea 2027 y 2028 sobre un tenant activo', json_encode($r['error'] ?? $ins));
+$drop($d, req('ejercicio', ['requested_at' => '2027-01-01T08:59:30Z'], $ULIDS[1]));
+$a->runOnce();
+ok(count(array_filter($h->log, fn($l) => str_contains($l, 'INSERT INTO ejercicios'))) === 2 && $resp($d, $ULIDS[1])['result']['ejercicios']['creados'] === [], 'accion ejercicio repetida: idempotente');
+[$d, $h, $a] = $mk();
+$drop($d, req('ejercicio'));
+$a->runOnce();
+ok($resp($d, $ULIDS[0])['error']['code'] === 'BAD_STATE', 'ejercicio sobre tenant inexistente: BAD_STATE');
+
+// ---------- primer ensayo real (zz-ensayo, 2026-11-25): disponibilidad, reintento, idempotencia con TLS, salida completa, plugins ----------
+$WP = '/usr/local/sbin/fs-bootstrap-tenant';
+$W = 'exec ' . $WP;
+$wrapCalls = fn(SimHost $h) => count(array_filter($h->log, fn($l) => str_starts_with($l, $W)));
+$bindError = function (SimHost $h) {                       // lo que deja un alta fallida: aprovisionado, ligado, estado error
+    $h->files['/srv/fs/acme/current'] = 'release';
+    $h->files['/etc/nginx/sites-available/fs-acme.conf'] = "server {\n    listen 80;\n    server_name acme.facturalo.redtelecom.app;\n}\n";
+    $h->files['/etc/fs/tenants/acme.master.json'] = json_encode(['tenant_id' => '01JD00000000000000000000T1', 'slug' => 'acme', 'state' => 'error']);
+};
+// A) espera de disponibilidad: nunca responde -> reintentable y NO se llama al wrapper
+[$d, $h, $a] = $mk();
+$h->scripted['curl -s -o /dev/null -m 10'] = [0, '000'];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['error']['step'] === 'bootstrap' && $r['error']['code'] === 'BOOTSTRAP_NOT_READY' && $r['error']['retryable'] === true && $wrapCalls($h) === 0 && count(array_filter($h->log, fn($l) => $l === 'sleep 3')) >= 19, 'A: sin respuesta de nginx/PHP en 60 s: BOOTSTRAP_NOT_READY reintentable, wrapper sin llamar', json_encode($r['error']));
+ok(str_contains($r['result']['rollback'], 'vhost conservado'), 'A: el vhost sigue');
+// A2) tarda en estar listo pero llega
+[$d, $h, $a] = $mk();
+$h->scriptedSeq['curl -s -o /dev/null -m 10'] = [[0, '000'], [0, '502']];
+$drop($d, req('provision'));
+$a->runOnce();
+ok($resp($d, $ULIDS[0])['status'] === 'succeeded' && $wrapCalls($h) === 1, 'A2: espera a que responda y entonces llama una vez al wrapper');
+// B) el wrapper falla la primera vez (sin salida, como en el ensayo) y funciona en el segundo intento
+[$d, $h, $a] = $mk();
+$h->scriptedSeq[$WP] = [[1, '']];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'succeeded' && $wrapCalls($h) === 2 && in_array('sleep 10', $h->log, true), 'B: wrapper falla una vez y se reintenta con espera: alta completa', json_encode($r['error'] ?? null));
+ok(str_contains($r['steps'][3]['detail'], 'intento 2/3'), 'B: el detalle dice en que intento funciono');
+// B2) falla siempre y sin salida: el mensaje lo dice y no queda "salida 1: " vacio
+[$d, $h, $a] = $mk();
+$h->scripted[$WP] = [1, ''];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['error']['code'] === 'BOOTSTRAP_FAILED' && str_contains($r['error']['message'], 'el script no escribio nada') && !str_ends_with($r['error']['message'], 'salida 1: ') && str_contains($r['error']['output'], 'intento 3/3: salida 1'), 'B2: sin salida del wrapper: mensaje explicito y los 3 intentos en error.output');
+// C) tenant ya instalado con TLS aplicado (reintento del ensayo): el wrapper NO se vuelve a llamar y el resto se completa
+[$d, $h, $a] = $mk();
+$bindError($h);
+$h->installed['fs_acme'] = true;
+$h->files['/etc/letsencrypt/live/fs-acme'] = 'cert';
+$h->scripted[$WP] = [1, ''];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'succeeded' && $wrapCalls($h) === 0 && str_contains($r['steps'][3]['detail'], 'ya instalado') && str_contains($r['steps'][3]['detail'], 'TLS ya aplicado'), 'C: instalado y con TLS: bootstrap = ya instalado, sin llamar al wrapper', json_encode($r['error'] ?? $r['steps'][3]));
+ok(!array_filter($h->log, fn($l) => str_contains($l, 'certbot')), 'C: con TLS no se llama a certbot');
+ok(count(array_filter($h->log, fn($l) => str_contains($l, 'UPDATE empresas'))) === 1 && count(array_filter($h->log, fn($l) => str_contains($l, "VALUES ('email'"))) === 1 && $r['result']['email_configured'] === true, 'C/F: company y email se aplican tras el reintento (datos de ejemplo y correo por defecto sustituidos)');
+$pj = enabled_plugins($h->files['/srv/fs/acme/shared/MyFiles/plugins.json'] ?? null);
+$all = array_unique(array_merge(Agent::CONF_DEFAULTS['plugins_base'], array_values(MODULE_PLUGINS), Agent::CONF_DEFAULTS['plugins_extra']));
+ok(count($pj) === count($all) && !array_diff($all, $pj) && count($all) === 21, 'C/E: quedan activados los 21 plugins (base + 7 modulos + 12 gratuitos/propios)', json_encode($pj));
+ok(count(array_filter($h->log, fn($l) => str_starts_with($l, 'exec /usr/local/sbin/fs-enable-plugins acme '))) === 1, 'E: un solo comando de activacion con los que faltaban');
+$drop($d, req('ejercicio', [], $ULIDS[1]));
+$a->runOnce();
+ok($resp($d, $ULIDS[1])['status'] === 'succeeded', 'F: la accion ejercicio funciona tras el reintento');
+$drop($d, req('status', [], $ULIDS[2]));
+$a->runOnce();
+ok($resp($d, $ULIDS[2])['result']['email_configured'] === true && $resp($d, $ULIDS[2])['result']['state'] === 'active', 'G: status informa email_configured=true');
+// E) idempotencia: otro provision con id nuevo sobre el tenant ya activo no activa nada mas; y un reintento tras error con plugins ya activos no los repite
+$bindError($h);
+$h->log = [];
+$drop($d, req('provision', [], $ULIDS[3]));
+$a->runOnce();
+ok($resp($d, $ULIDS[3])['status'] === 'succeeded' && !array_filter($h->log, fn($l) => str_contains($l, 'fs-enable-plugins')) && $wrapCalls($h) === 0, 'E: con todos los plugins ya activos no se vuelve a activar ninguno');
+$pl = array_values(array_filter($resp($d, $ULIDS[3])['steps'], fn($s) => $s['name'] === 'plugins'))[0]['detail'];
+ok(str_starts_with($pl, '21 ya activos, 0 activados ahora'), 'E: el detalle del paso plugins cuenta ya activos', $pl);
+// C2) instalado pero sin TLS (certbot del wrapper solo avisa): el agente emite el certificado, no re-llama al wrapper
+[$d, $h, $a] = $mk();
+$bindError($h);
+$h->installed['fs_acme'] = true;
+$drop($d, req('provision'));
+$a->runOnce();
+ok($resp($d, $ULIDS[0])['status'] === 'succeeded' && $wrapCalls($h) === 0 && in_array('exec certbot --nginx -d acme.facturalo.redtelecom.app --cert-name fs-acme --non-interactive --agree-tos --register-unsafely-without-email --redirect', $h->log, true), 'C2: instalado sin TLS: certbot directo, sin wrapper');
+// C3) TLS pero sin api_keys: estado incoherente, no se llama al wrapper (daria 301) y se explica
+[$d, $h, $a] = $mk();
+$bindError($h);
+$h->files['/etc/letsencrypt/live/fs-acme'] = 'cert';
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'failed' && $r['error']['code'] === 'BOOTSTRAP_INCONSISTENT' && $r['error']['retryable'] === false && $wrapCalls($h) === 0, 'C3: TLS sin FS instalado: BOOTSTRAP_INCONSISTENT, wrapper sin llamar');
+// H) la BD a medias (api_keys no existe -> la consulta lanza) cuenta como no instalado
+[$d, $h, $a] = $mk();
+$bindError($h);
+$hh = new class extends SimHost {
+    public function sql(string $db, string $sql, array $params = [], bool $sensitive = false): array
+    {
+        if (str_contains($sql, 'FROM api_keys')) {
+            throw new \PDOException("Table 'api_keys' doesn't exist");
+        }
+        return parent::sql($db, $sql, $params, $sensitive);
+    }
+};
+$hh->files = $h->files;
+$hh->dns = $h->dns;
+$a2 = new Agent(array_merge(Agent::CONF_DEFAULTS, ['queue' => "$d/q", 'work' => "$d/w", 'keys' => "$d/keys"]), $hh, fn() => T0 + 20, fn(int $s) => null);
+$drop($d, req('provision'));
+$a2->runOnce();
+ok($resp($d, $ULIDS[0])['status'] === 'succeeded' && count(array_filter($hh->log, fn($l) => str_starts_with($l, $W))) === 1, 'H: BD a medias (12 tablas, sin api_keys): se llama al wrapper');
+// I) secretos fuera de respuesta y log, salida truncada
+[$d, $h, $a] = $mk();
+$h->files['/etc/fs/tenants/acme.secrets'] = "FS_ADMIN=admin\nFS_ADMIN_PASS=ClaveAdminSecreta1\nFS_API_KEY=ApiKeySecreta1234\n";
+$h->scripted[$WP] = [1, str_repeat("linea de relleno\n", 2000) . "login con ClaveAdminSecreta1 y apikey=ApiKeySecreta1234 password=otra-clave-9 multireqtoken=abcdef123\nERROR final visible\n"];
+$drop($d, req('provision'));
+$a->runOnce();
+$raw = (string)file_get_contents("$d/q/responses/{$ULIDS[0]}.json");
+$r = json_decode($raw, true);
+$logTxt = (string)($h->files[$r['error']['log'] ?? ''] ?? '');
+ok(!str_contains($raw, 'ClaveAdminSecreta1') && !str_contains($raw, 'ApiKeySecreta1234') && !str_contains($raw, 'otra-clave-9') && !str_contains($raw, 'abcdef123') && str_contains($raw, '***'), 'I: la respuesta no contiene secretos (conocidos ni patrones pass/apikey/token)');
+ok($logTxt !== '' && !str_contains($logTxt, 'ClaveAdminSecreta1') && !str_contains($logTxt, 'otra-clave-9') && str_contains($logTxt, 'ERROR final visible'), 'I: el log del host tampoco, y conserva la salida');
+ok(strlen($r['error']['output']) <= 4000 + 40 && str_contains($r['error']['output'], 'ERROR final visible') && str_contains($r['error']['output'], '[...truncado...]') && strlen($logTxt) > strlen($r['error']['output']), 'I: error.output = cola de 4000 car.; el log guarda mas');
+ok(str_contains(redact("bad \xC3\x28 utf8 pass=zzz"), '?') && json_encode(redact("x\xFF")) !== false, 'I: UTF-8 invalido no rompe el JSON de la respuesta');
+// J) plugins: opcional ausente = aviso; obligatorio ausente = fallo; lista configurable; no activados = fallo
+[$d, $h, $a] = $mk();
+unset($h->files['/srv/fs/acme/current/Plugins/VerifactuFacturalo']);
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['status'] === 'succeeded' && $r['result']['plugins']['ausentes_opcionales'] === ['VerifactuFacturalo'], 'J: plugin opcional ausente en la release: aviso, el alta sigue', json_encode($r['error'] ?? $r['result']['plugins'] ?? null));
+[$d, $h, $a] = $mk();
+unset($h->files['/srv/fs/acme/current/Plugins/RemesasSepaFacturalo']);
+$drop($d, req('provision'));
+$a->runOnce();
+ok($resp($d, $ULIDS[0])['error']['code'] === 'PLUGIN_MISSING', 'J: plugin obligatorio ausente: PLUGIN_MISSING');
+[$d, $h, $a] = $mk(T0 + 20, ['plugins_extra' => ['PluginNuevo']]);
+$h->files['/srv/fs/acme/current/Plugins/PluginNuevo'] = 'dir';
+$drop($d, req('provision'));
+$a->runOnce();
+$en = enabled_plugins($h->files['/srv/fs/acme/shared/MyFiles/plugins.json'] ?? null);
+ok(in_array('PluginNuevo', $en, true) && !in_array('ValidaNIF', $en, true), 'J: la lista de plugins es configurable (plugins_extra): se activa el nuevo y deja de pedirse ValidaNIF');
+[$d, $h, $a] = $mk();
+$h->scripted['/usr/local/sbin/fs-enable-plugins'] = [0, ''];            // sale 0 pero FS no los activa (dependencias)
+$bindError($h);
+$h->installed['fs_acme'] = true;
+$h->files['/etc/letsencrypt/live/fs-acme'] = 'cert';
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['error']['code'] === 'PLUGINS_NOT_ENABLED' && $r['error']['step'] === 'plugins' && str_contains($r['result']['rollback'], 'vhost conservado'), 'J: plugins que no quedan activos: PLUGINS_NOT_ENABLED (se verifica plugins.json)');
+// K) fallo anterior al bootstrap (provision) sigue quitando el vhost
+[$d, $h, $a] = $mk();
+$h->scripted['/usr/local/sbin/fs-provision-tenant'] = [1, 'useradd: fallo'];
+$drop($d, req('provision'));
+$a->runOnce();
+$r = $resp($d, $ULIDS[0]);
+ok($r['error']['code'] === 'PROVISION_FAILED' && str_contains($r['result']['rollback'], 'vhost deshabilitado') && str_contains($r['error']['output'], 'useradd: fallo'), 'K: fallo en provision: vhost deshabilitado y salida registrada');
+
+echo "\n$total comprobaciones, $fail fallos\n";
+exit($fail ? 1 : 0);

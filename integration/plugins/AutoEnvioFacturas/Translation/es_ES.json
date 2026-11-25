@@ -1,0 +1,18 @@
+{
+    "auto-invoice-emails": "Envío auto de facturas",
+    "invoice-email-sending": "Envío de facturas por email",
+    "from-date": "No enviar facturas anteriores a",
+    "max-emails-per-run": "Máx. emails por ejecución",
+    "include-rectified-invoices": "Incluir rectificativas",
+    "bcc-email": "Copia oculta (CCO)",
+    "attempts": "Intentos",
+    "result": "Resultado",
+    "delay-minutes": "Margen antes de enviar (minutos)",
+    "sending-history": "Historial de envíos",
+    "retry-sending": "Repetir",
+    "resend-invoice": "Reenvío",
+    "autoenvio-not-applied": "%code%: no aplicado, %reason%.",
+    "autoenvio-requests-applied": "%count% solicitud(es) registradas. Se enviarán en la próxima pasada del cron (como mucho, en un minuto).",
+    "autoenvio-email-text": "Email de la factura",
+    "autoenvio-email-text-desc": "El asunto y el texto se editan en <a href=\"EditEmailNotification?code=autoenviofacturas-factura\">Notificaciones → autoenviofacturas-factura</a>. Marcadores disponibles: <code>{name}</code> cliente · <code>{email}</code> destinatario · <code>{code}</code> código · <code>{date}</code> fecha · <code>{total}</code> importe · <code>{company}</code> tu empresa · <code>{payment_method}</code> forma de pago · <code>{due_date}</code> vencimiento · <code>{bank_account}</code> cuenta para el pago."
+}

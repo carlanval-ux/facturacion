@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="date" order="100"><widget type="datetime" fieldname="fecha"/></column>
+        <column name="invoice" order="110"><widget type="text" fieldname="codigofactura"/></column>
+        <column name="step" order="120"><widget type="text" fieldname="paso"/></column>
+        <column name="email" order="130"><widget type="text" fieldname="email"/></column>
+        <column name="result" order="140"><widget type="text" fieldname="resultado"/></column>
+        <column name="origin" order="150"><widget type="text" fieldname="origen"/></column>
+        <column name="message" order="160"><widget type="text" fieldname="mensaje"/></column>
+    </columns>
+    <rows>
+        <row type="status">
+            <option color="success" fieldname="resultado">enviado</option>
+            <option color="danger" fieldname="resultado">error</option>
+            <option color="warning" fieldname="resultado">sin-email</option>
+            <option color="secondary" fieldname="resultado">omitido</option>
+        </row>
+    </rows>
+</view>

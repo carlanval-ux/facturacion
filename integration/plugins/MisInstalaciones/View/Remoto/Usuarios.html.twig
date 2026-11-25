@@ -1,0 +1,34 @@
+<div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+        <thead>
+        <tr>
+            <th class="ps-3">{{ trans('user') }}</th>
+            <th>{{ trans('state') }}</th>
+            <th>{{ trans('group') }}</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for usuario in usuarios ?? [] %}
+            <tr>
+                <td class="ps-3">{{ usuario.nick }}</td>
+                <td>
+                    <span class="badge {{ usuario.activo ? 'bg-success' : 'bg-secondary' }}">
+                        {{ usuario.activo ? trans('instalacion-usuario-activo') : trans('instalacion-usuario-inactivo') }}
+                    </span>
+                </td>
+                <td>
+                    {% for grupo in usuario.grupos %}
+                        <span class="badge text-bg-light border me-1">{{ grupo }}</span>
+                    {% else %}
+                        ---
+                    {% endfor %}
+                </td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="3"><b>{{ trans('no-data') }}</b></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>

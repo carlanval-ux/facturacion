@@ -1,0 +1,57 @@
+{% extends "Master/MicroTemplate.html.twig" %}
+
+{% block body %}
+    {{ parent() }}
+    <div class="container">
+        <div class="row justify-content-md-center">
+            <div class="col-md-6">
+                <form action="{{ asset('login') }}" method="post" class="form">
+                    {{ formToken() }}
+                    <input type="hidden" name="action" value="two-factor-validation">
+                    <input type="hidden" name="fsNick" value="{{ fsc.two_factor_user }}">
+                    <div class="card mt-4">
+                        <a href="{{ asset('login') }}">
+                            {% set idfile = settings('default','idloginimage', 0) %}
+                            {{ _self.loadLogo(idfile) }}
+                        </a>
+                        <div class="card-body">
+                            <p class="card-text text-center">{{ trans('two-factor-code') }}</p>
+                            <div class="mb-3">
+                                <input type="text" name="fsTwoFactorCode" class="form-control" maxlength="50"
+                                       placeholder="{{ trans('code') }}" required autocomplete="off"
+                                       autofocus/>
+                            </div>
+                            <button type="submit" class="btn w-100 btn-primary mb-4">
+                                {{ trans('verify') }}
+                            </button>
+                        </div>
+                        <div class="card-footer text-center">
+                            <p>
+                                Facturalo: facturación sencilla, por RED TELECOM.                            </p>
+                            </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block css %}
+    {{ parent() }}
+    <style>
+        body {
+            background-color: #333A40;
+        }
+    </style>
+{% endblock %}
+
+{% macro loadLogo(idfile) %}
+    {% set url = 'Dinamic/Assets/Images/horizontal-logo.png' %}
+    {% if idfile > 0 %}
+        {% set attached = attachedFile(idfile) %}
+        {% if attached.filename is not empty %}
+            {% set url = attached.url('download-permanent') %}
+        {% endif %}
+    {% endif %}
+    <img class="card-img-top" src="{{ asset(url) }}" alt="Facturalo"/>
+{% endmacro loadLogo %}

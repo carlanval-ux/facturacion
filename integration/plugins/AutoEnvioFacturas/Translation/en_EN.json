@@ -1,0 +1,18 @@
+{
+    "auto-invoice-emails": "Auto invoice emails",
+    "invoice-email-sending": "Send invoices by email",
+    "from-date": "Don't send invoices before",
+    "max-emails-per-run": "Max emails per run",
+    "include-rectified-invoices": "Include rectified invoices",
+    "bcc-email": "Blind copy (BCC)",
+    "attempts": "Attempts",
+    "result": "Result",
+    "delay-minutes": "Delay before sending (minutes)",
+    "sending-history": "Sending history",
+    "retry-sending": "Retry",
+    "resend-invoice": "Resend",
+    "autoenvio-not-applied": "%code%: not applied, %reason%.",
+    "autoenvio-requests-applied": "%count% request(s) registered. They will be sent on the next cron run (within a minute).",
+    "autoenvio-email-text": "Invoice email",
+    "autoenvio-email-text-desc": "Subject and text are edited in <a href=\"EditEmailNotification?code=autoenviofacturas-factura\">Notifications → autoenviofacturas-factura</a>. Available markers: <code>{name}</code> customer · <code>{email}</code> recipient · <code>{code}</code> code · <code>{date}</code> date · <code>{total}</code> amount · <code>{company}</code> your company · <code>{payment_method}</code> payment method · <code>{due_date}</code> due date · <code>{bank_account}</code> payment account."
+}

@@ -1,0 +1,261 @@
+<?php
+/**
+ * This file is part of Informes plugin for FacturaScripts
+ * Copyright (C) 2022-2026 Carlos García Gómez <carlos@facturascripts.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+namespace FacturaScripts\Plugins\Informes\Lib\ReportChart;
+
+use FacturaScripts\Core\Base\DataBase;
+use FacturaScripts\Core\Tools;
+use FacturaScripts\Dinamic\Model\Report as DinReport;
+use FacturaScripts\Plugins\Informes\Model\Report;
+
+/**
+ * Description of AreaChart
+ *
+ * @author Carlos García Gómez <carlos@facturascripts.com>
+ */
+abstract class Chart
+{
+    /** @var Report */
+    protected $report;
+
+    abstract public function render(array $dataChart = []): string;
+
+    abstract protected function getData(): array;
+
+    public function __construct(Report $report)
+    {
+        $this->report = $report;
+    }
+
+    public function getDataSources(): array
+    {
+        $dataBase = new DataBase();
+        $sql = $this->getSql($this->report);
+        if (empty($sql) || !$dataBase->tableExists($this->report->getTable())) {
+            return [];
+        }
+
+        $sources = [$this->report->name => $dataBase->select($sql)];
+
+        $comparedReport = new DinReport();
+        if (!empty($this->report->compared) && $comparedReport->load($this->report->compared)) {
+            $sources[$comparedReport->name] = $dataBase->select($this->getSql($comparedReport));
+        }
+
+        // si solo hay un elemento, devolvemos
+        if (count($sources) < 2) {
+            return $sources;
+        }
+
+        $values = [];
+        foreach ($sources[$this->report->name] as $row) {
+            $values[] = $row['xcol'];
+        }
+
+        foreach ($sources[$comparedReport->name] as $row) {
+            if (!in_array($row['xcol'], $values)) {
+                $values[] = $row['xcol'];
+            }
+        }
+
+        // calculamos la diferencia
+        $key = 'difference';
+        $sources[$key] = [];
+        sort($values);
+        foreach ($values as $index) {
+            $sources[$key][$index] = [
+                'xcol' => $index,
+                'ycol' => 0,
+            ];
+
+            foreach ($sources[$this->report->name] as $row) {
+                if ($row['xcol'] === $index) {
+                    $sources[$key][$index]['ycol'] = $row['ycol'];
+                    break;
+                }
+            }
+
+            foreach ($sources[$comparedReport->name] as $row) {
+                if ($row['xcol'] === $index) {
+                    $sources[$key][$index]['ycol'] -= $row['ycol'];
+                    break;
+                }
+            }
+        }
+
+        return $sources;
+    }
+
+    protected function getSql(Report $report): string
+    {
+        // si hay una sql personalizada, la usamos
+        if (!empty($report->getCustomSql())) {
+            return $report->getCustomSql();
+        }
+
+        if (empty($report->table) || empty($report->xcolumn)) {
+            return '';
+        }
+
+        $db_type = Tools::config('db_type');
+        return strtolower($db_type) == 'postgresql' ?
+            $this->getSqlPostgreSQL($report) :
+            $this->getSqlMySQL($report);
+    }
+
+    protected function getSqlMySQL(Report $report): string
+    {
+        $xCol = $report->xcolumn;
+        switch ($report->xoperation) {
+            case 'HAS_A_VALUE':
+                $xCol = "CASE WHEN " . $report->xcolumn . " IS NOT NULL THEN '" . Tools::trans('has-a-value')
+                    . "' ELSE '" . Tools::trans('does-not-have-a-value') . "' END";
+                break;
+
+            case 'DOES_NOT_HAVE_A_VALUE':
+                $xCol = "CASE WHEN " . $report->xcolumn . " IS NULL THEN '" . Tools::trans('has-a-value')
+                    . "' ELSE '" . Tools::trans('does-not-have-a-value') . "' END";
+                break;
+
+            case 'HOUR':
+                $xCol = "DATE_FORMAT(" . $report->xcolumn . ", '%H')";
+                break;
+
+            case 'DAY':
+                $xCol = "DATE_FORMAT(" . $report->xcolumn . ", '%Y-%m-%d')";
+                break;
+
+            case 'WEEK':
+                $xCol = "DATE_FORMAT(" . $report->xcolumn . ", '%x-%v')";
+                break;
+
+            case 'MONTH':
+                $xCol = "DATE_FORMAT(" . $report->xcolumn . ", '%m')";
+                break;
+
+            case 'MONTHS':
+                $xCol = "DATE_FORMAT(" . $report->xcolumn . ", '%Y-%m')";
+                break;
+
+            case 'UNIXTIME_DAY':
+                $xCol = "DATE_FORMAT(FROM_UNIXTIME(" . $report->xcolumn . "), '%Y-%m-%d')";
+                break;
+
+            case 'UNIXTIME_WEEK':
+                $xCol = "DATE_FORMAT(FROM_UNIXTIME(" . $report->xcolumn . "), '%x-%v')";
+                break;
+
+            case 'UNIXTIME_MONTH':
+                $xCol = "DATE_FORMAT(FROM_UNIXTIME(" . $report->xcolumn . "), '%Y-%m')";
+                break;
+
+            case 'UNIXTIME_YEAR':
+                $xCol = "DATE_FORMAT(FROM_UNIXTIME(" . $report->xcolumn . "), '%Y')";
+                break;
+
+            case 'YEAR':
+                $xCol = "DATE_FORMAT(" . $report->xcolumn . ", '%Y')";
+                break;
+        }
+
+        $yCol = match ($report->yoperation) {
+            'SUM' => "SUM(" . $report->ycolumn . ")",
+            'AVERAGE' => "AVG(" . $report->ycolumn . ")",
+            'MAXIMUM' => "MAX(" . $report->ycolumn . ")",
+            'MINIMUM' => "MIN(" . $report->ycolumn . ")",
+            'COUNT' => "COUNT(" . $report->ycolumn . ")",
+            'COUNT_DISTINCT' => "COUNT(DISTINCT " . $report->ycolumn . ")",
+            default => empty($report->ycolumn) ? 'COUNT(*)' : 'SUM(' . $report->ycolumn . ')',
+        };
+
+        return 'SELECT ' . $xCol . ' as xcol, ' . $yCol . ' as ycol FROM ' . $report->table
+            . (empty($report->getJoins()) ? '' : ' ' . implode(' ', $report->getJoins()))
+            . $report->getSqlFilters() . ' GROUP BY xcol ORDER BY xcol ASC;';
+    }
+
+    protected function getSqlPostgreSQL(Report $report): string
+    {
+        $xCol = $report->xcolumn;
+        switch ($report->xoperation) {
+            case 'HAS_A_VALUE':
+                $xCol = "CASE WHEN " . $report->xcolumn . " IS NOT NULL THEN '" . Tools::trans('has-a-value')
+                    . "' ELSE '" . Tools::trans('does-not-have-a-value') . "' END";
+                break;
+
+            case 'DOES_NOT_HAVE_A_VALUE':
+                $xCol = "CASE WHEN " . $report->xcolumn . " IS NULL THEN '" . Tools::trans('has-a-value')
+                    . "' ELSE '" . Tools::trans('does-not-have-a-value') . "' END";
+                break;
+
+            case 'HOUR':
+                $xCol = "to_char(" . $report->xcolumn . ", 'HH24')";
+                break;
+
+            case 'DAY':
+                $xCol = "to_char(" . $report->xcolumn . ", 'YYYY-MM-DD')";
+                break;
+
+            case 'WEEK':
+                $xCol = "to_char(" . $report->xcolumn . ", 'IYYY-IW')";
+                break;
+
+            case 'MONTH':
+                $xCol = "to_char(" . $report->xcolumn . ", 'MM')";
+                break;
+
+            case 'MONTHS':
+                $xCol = "to_char(" . $report->xcolumn . ", 'YYYY-MM')";
+                break;
+
+            case 'UNIXTIME_DAY':
+                $xCol = "to_char(to_timestamp(" . $report->xcolumn . "), 'YYYY-MM-DD')";
+                break;
+
+            case 'UNIXTIME_WEEK':
+                $xCol = "to_char(to_timestamp(" . $report->xcolumn . "), 'IYYY-IW')";
+                break;
+
+            case 'UNIXTIME_MONTH':
+                $xCol = "to_char(to_timestamp(" . $report->xcolumn . "), 'YYYY-MM')";
+                break;
+
+            case 'UNIXTIME_YEAR':
+                $xCol = "to_char(to_timestamp(" . $report->xcolumn . "), 'YYYY')";
+                break;
+
+            case 'YEAR':
+                $xCol = "to_char(" . $report->xcolumn . ", 'YYYY')";
+                break;
+        }
+
+        $yCol = match ($report->yoperation) {
+            'SUM' => "SUM(" . $report->ycolumn . ")",
+            'AVERAGE' => "AVG(" . $report->ycolumn . ")",
+            'MAXIMUM' => "MAX(" . $report->ycolumn . ")",
+            'MINIMUM' => "MIN(" . $report->ycolumn . ")",
+            'COUNT' => "COUNT(" . $report->ycolumn . ")",
+            'COUNT_DISTINCT' => "COUNT(DISTINCT " . $report->ycolumn . ")",
+            default => empty($report->ycolumn) ? 'COUNT(*)' : 'SUM(' . $report->ycolumn . ')',
+        };
+
+        return 'SELECT ' . $xCol . ' as xcol, ' . $yCol . ' as ycol FROM ' . $report->table
+            . (empty($report->getJoins()) ? '' : ' ' . implode(' ', $report->getJoins()))
+            . $report->getSqlFilters() . ' GROUP BY xcol ORDER BY xcol ASC;';
+    }
+}

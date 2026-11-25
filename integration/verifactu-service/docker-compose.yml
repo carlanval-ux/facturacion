@@ -1,0 +1,15 @@
+# Alojamiento del servicio central (sin desplegar desde aquí). Los secretos van en un fichero .env FUERA del repo: docker compose --env-file /ruta/seguro/verifactu.env up -d --build
+services:
+  verifactu:
+    build: .
+    restart: unless-stopped
+    environment:
+      CERT_MASTER_KEY: ${CERT_MASTER_KEY:?define CERT_MASTER_KEY (openssl rand -base64 32)}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?define ADMIN_TOKEN (>= 20 caracteres)}
+      VERIFACTU_PROD_HABILITADO: ${VERIFACTU_PROD_HABILITADO:-false} # puerta global: solo «true» la abre; en teleco-test déjala en false
+    ports:
+      - "127.0.0.1:8787:8787" # solo loopback: publicar detrás de un proxy con TLS
+    volumes:
+      - verifactu-data:/data
+volumes:
+  verifactu-data:

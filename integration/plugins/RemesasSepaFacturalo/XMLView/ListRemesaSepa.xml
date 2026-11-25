@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view>
+    <columns>
+        <column name="code" order="100">
+            <widget type="text" fieldname="codigo"/>
+        </column>
+        <column name="date" order="110">
+            <widget type="datetime" fieldname="fecha"/>
+        </column>
+        <column name="sepa-receipts-count" display="right" order="120">
+            <widget type="number" fieldname="numrecibos" decimal="0"/>
+        </column>
+        <column name="total" display="right" order="130">
+            <widget type="money" fieldname="total"/>
+        </column>
+        <column name="status" order="140">
+            <widget type="text" fieldname="estado"/>
+        </column>
+        <column name="user" display="none" order="150">
+            <widget type="text" fieldname="nick"/>
+        </column>
+    </columns>
+    <rows>
+        <row type="status">
+            <option color="warning" fieldname="estado">generada</option>
+            <option color="success" fieldname="estado">cerrada</option>
+            <option color="secondary" fieldname="estado">anulada</option>
+        </row>
+    </rows>
+</view>
